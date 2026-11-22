@@ -38,14 +38,20 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Prepare Android SDK (API 36, Build-Tools 36.1.0 & Bubblewrap Compatibility)
+      - name: Prepare Android SDK (API 36, Build-Tools & Bubblewrap Compatibility)
         id: android_sdk
+        shell: bash
         run: |
-          set -euo pipefail
+          set -e
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           if [ ! -d "$SDK_ROOT" ]; then
             echo "Android SDK directory not found at $SDK_ROOT"
             exit 1
+          fi
+
+          # Ensure current runner user can write licenses, platforms, and symlink inside SDK_ROOT
+          if [ ! -w "$SDK_ROOT" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$SDK_ROOT" || true
           fi
 
           # Locate sdkmanager inside modern cmdline-tools or legacy tools layout
@@ -62,6 +68,7 @@ jobs:
 
           if [ -z "$SDKMANAGER" ]; then
             echo "sdkmanager not found inside $SDK_ROOT"
+            ls -la "$SDK_ROOT"
             exit 1
           fi
 
@@ -75,15 +82,26 @@ jobs:
             ln -s "$SDKMANAGER_DIR" "$SDK_ROOT/bin" 2>/dev/null || sudo ln -s "$SDKMANAGER_DIR" "$SDK_ROOT/bin"
           fi
 
-          # Accept SDK licenses and install exact platform + build-tools required by Gradle & Bubblewrap
-          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
-          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-36" "build-tools;36.1.0"
+          # Accept all Android SDK licenses (ignore SIGPIPE from yes)
+          yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
+
+          # Install Android API 36 platform (required by Bubblewrap's compileSdkVersion 36)
+          if [ ! -d "$SDK_ROOT/platforms/android-36" ]; then
+            echo "Installing platforms;android-36..."
+            "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-36"
+          fi
+
+          # Ensure a recent build-tools package with zipalign + apksigner is available
+          if ! ls -d "$SDK_ROOT"/build-tools/36.* >/dev/null 2>&1; then
+            "$SDKMANAGER" --sdk_root="$SDK_ROOT" "build-tools;36.0.0" || \
+            "$SDKMANAGER" --sdk_root="$SDK_ROOT" "build-tools;35.0.0" || true
+          fi
 
           # Write Bubblewrap config with verified JDK and SDK paths
           mkdir -p ~/.bubblewrap
           cat <<EOF > ~/.bubblewrap/config.json
           {
-            "jdkPath": "$JAVA_HOME",
+            "jdkPath": "${JAVA_HOME:-}",
             "androidSdkPath": "$SDK_ROOT"
           }
           EOF
@@ -95,15 +113,16 @@ jobs:
       - name: Prepare Release Keystore (Secrets or New Upload Key)
         id: keystore
         working-directory: android-twa
+        shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          set -euo pipefail
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            STORE_PASS="$KEYSTORE_PASSWORD"
-            KEY_PASS="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          set -e
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            STORE_PASS="${KEYSTORE_PASSWORD:-}"
+            KEY_PASS="${KEY_PASSWORD:-$STORE_PASS}"
             echo "$KEYSTORE_BASE64" | base64 -d > hsp-delivery-release.keystore
           else
             STORE_PASS="HspDelivery2026!"
@@ -122,7 +141,13 @@ jobs:
           echo "store_pass=$STORE_PASS" >> "$GITHUB_OUTPUT"
           echo "key_pass=$KEY_PASS" >> "$GITHUB_OUTPUT"
 
-          SHA256=$(keytool -list -v -keystore hsp-delivery-release.keystore -alias hspdelivery -storepass "$STORE_PASS" | grep "SHA256:" | head -n 1 | awk '{print $2}')
+          # Capture keytool output in a variable and parse with awk (avoids SIGPIPE from head -n 1)
+          KEYTOOL_OUT="$(keytool -list -v -keystore hsp-delivery-release.keystore -alias hspdelivery -storepass "$STORE_PASS")"
+          SHA256="$(awk '/SHA256:/ { print $2; exit }' <<< "$KEYTOOL_OUT")"
+          if [ -z "$SHA256" ]; then
+            echo "Could not extract SHA-256 fingerprint from keystore"
+            exit 1
+          fi
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           echo "Upload Key SHA-256: $SHA256"
 
@@ -164,13 +189,20 @@ jobs:
 
       - name: Compile & Sign Android App Bundle (.aab) and APK (.apk)
         working-directory: android-twa
+        shell: bash
         env:
           SDK_ROOT: ${{ steps.android_sdk.outputs.sdk_root }}
           STORE_PASS: ${{ steps.keystore.outputs.store_pass }}
           KEY_PASS: ${{ steps.keystore.outputs.key_pass }}
         run: |
-          set -euo pipefail
+          set -e
           echo "sdk.dir=$SDK_ROOT" > local.properties
+
+          # Replace deprecated jcenter() in Bubblewrap's generated build.gradle with mavenCentral()
+          if [ -f build.gradle ]; then
+            sed -i 's/jcenter()/mavenCentral()/g' build.gradle
+          fi
+
           chmod +x ./gradlew
 
           # Build both release Android App Bundle (.aab) and release APK (.apk)
@@ -183,7 +215,7 @@ jobs:
             exit 1
           fi
           cp "$RAW_AAB" app-release-bundle.aab
-          jarsigner -sigalg SHA256withRSA -digestalg SHA-256 \
+          jarsigner \
             -keystore hsp-delivery-release.keystore \
             -storepass "$STORE_PASS" \
             -keypass "$KEY_PASS" \
@@ -191,11 +223,20 @@ jobs:
             hspdelivery
           jarsigner -verify app-release-bundle.aab
 
-          # Zipalign and sign the direct-install Android APK (.apk) with apksigner
-          BUILD_TOOLS_DIR="$SDK_ROOT/build-tools/36.1.0"
-          if [ ! -d "$BUILD_TOOLS_DIR" ]; then
-            BUILD_TOOLS_DIR="$(ls -d "$SDK_ROOT"/build-tools/* 2>/dev/null | sort -V | tail -n 1)"
+          # Find newest installed Android build-tools directory containing zipalign + apksigner
+          BUILD_TOOLS_DIR=""
+          for dir in $(ls -d "$SDK_ROOT"/build-tools/* 2>/dev/null | sort -V); do
+            if [ -x "$dir/zipalign" ] && [ -x "$dir/apksigner" ]; then
+              BUILD_TOOLS_DIR="$dir"
+            fi
+          done
+
+          if [ -z "$BUILD_TOOLS_DIR" ]; then
+            echo "Could not find zipalign and apksigner under $SDK_ROOT/build-tools/"
+            ls -la "$SDK_ROOT/build-tools" || true
+            exit 1
           fi
+          echo "Using build-tools: $BUILD_TOOLS_DIR"
 
           RAW_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
           if [ ! -f "$RAW_APK" ]; then
@@ -203,6 +244,7 @@ jobs:
           fi
           if [ ! -f "$RAW_APK" ]; then
             echo "Expected APK not found under app/build/outputs/apk/release/"
+            ls -la app/build/outputs/apk/release/ || true
             exit 1
           fi
 
