@@ -41,7 +41,10 @@ jobs:
       - name: Setup Android SDK (API 36 & Build-Tools 36.0.0)
         uses: android-actions/setup-android@v4
         with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          packages: |
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
 
       - name: Configure Bubblewrap SDK & JDK Paths
         id: android_sdk
@@ -164,13 +167,23 @@ jobs:
           STORE_PASS: ${{ steps.keystore.outputs.store_pass }}
           KEY_PASS: ${{ steps.keystore.outputs.key_pass }}
         run: |
+          echo ">>> [1/4] Writing local.properties (sdk.dir=$SDK_ROOT)"
           echo "sdk.dir=$SDK_ROOT" > local.properties
           chmod +x ./gradlew
 
-          # Build both release Android App Bundle (.aab) and release APK (.apk)
-          ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
+          echo ">>> [2/4] Running Gradle bundleRelease & assembleRelease..."
+          GRADLE_EXIT=0
+          ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace > gradle-build.log 2>&1 || GRADLE_EXIT=$?
+          cat gradle-build.log
+          if [ "$GRADLE_EXIT" -ne 0 ]; then
+            echo "### Gradle Build Failure (last 40 lines)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 40 gradle-build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit "$GRADLE_EXIT"
+          fi
 
-          # Sign the Play Console Android App Bundle (.aab) with jarsigner
+          echo ">>> [3/4] Signing Play Console Android App Bundle (.aab) with jarsigner..."
           RAW_AAB="app/build/outputs/bundle/release/app-release.aab"
           if [ ! -f "$RAW_AAB" ]; then
             echo "ERROR: Expected AAB not found at $RAW_AAB"
@@ -184,6 +197,8 @@ jobs:
             app-release-bundle.aab \
             hspdelivery
           jarsigner -verify app-release-bundle.aab
+
+          echo ">>> [4/4] Zipaligning & signing direct-install APK (.apk) with apksigner..."
 
           # Find newest installed Android build-tools directory containing zipalign + apksigner
           BUILD_TOOLS_DIR=""

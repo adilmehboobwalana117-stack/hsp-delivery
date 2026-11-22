@@ -54,6 +54,34 @@ function patchGeneratedAndroidProject(projectDir) {
       console.log('[HSP Builder] Patched AndroidManifest.xml: removed deprecated package attribute for AGP 8+');
     }
   }
+
+  const gradlePropsPath = path.join(projectDir, 'gradle.properties');
+  if (fs.existsSync(gradlePropsPath)) {
+    let props = fs.readFileSync(gradlePropsPath, 'utf8');
+    const additions = [];
+    if (!props.includes('android.suppressUnsupportedCompileSdk=')) {
+      additions.push('android.suppressUnsupportedCompileSdk=36');
+    }
+    if (!props.includes('android.r8.failOnMissingClasses=')) {
+      additions.push('android.r8.failOnMissingClasses=false');
+    }
+    if (additions.length > 0) {
+      props = props.trimEnd() + '\n' + additions.join('\n') + '\n';
+      fs.writeFileSync(gradlePropsPath, props);
+      console.log('[HSP Builder] Patched gradle.properties: added AGP 8.9 / SDK 36 compatibility flags');
+    }
+  }
+
+  const appGradlePath = path.join(projectDir, 'app', 'build.gradle');
+  if (fs.existsSync(appGradlePath)) {
+    const content = fs.readFileSync(appGradlePath, 'utf8');
+    // Bubblewrap's locationdelegation:1.1.2 triggers R8 missing-class errors under AGP 8+ full mode
+    const updated = content.replace(/minifyEnabled\s+true/g, 'minifyEnabled false');
+    if (updated !== content) {
+      fs.writeFileSync(appGradlePath, updated);
+      console.log('[HSP Builder] Patched app/build.gradle: disabled R8 minification for locationdelegation AGP 8+ compatibility');
+    }
+  }
 }
 
 function findCmdlineToolsBin(sdkPath) {

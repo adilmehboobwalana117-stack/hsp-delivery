@@ -360,6 +360,17 @@ async function main() {
     if (fs.existsSync(manifestXml)) {
       fs.writeFileSync(manifestXml, fs.readFileSync(manifestXml, 'utf8').replace(/(<manifest\\b[^>]*?)\\s+package="[^"]*"/, '$1'));
     }
+    const gradleProps = path.join(__dirname, 'gradle.properties');
+    if (fs.existsSync(gradleProps)) {
+      const p = fs.readFileSync(gradleProps, 'utf8');
+      if (!p.includes('android.suppressUnsupportedCompileSdk=')) {
+        fs.writeFileSync(gradleProps, p.trimEnd() + '\\nandroid.suppressUnsupportedCompileSdk=36\\nandroid.r8.failOnMissingClasses=false\\n');
+      }
+    }
+    const appGradle = path.join(__dirname, 'app', 'build.gradle');
+    if (fs.existsSync(appGradle)) {
+      fs.writeFileSync(appGradle, fs.readFileSync(appGradle, 'utf8').replace(/minifyEnabled\\s+true/g, 'minifyEnabled false'));
+    }
     console.log('[2/2] Building signed .AAB (Play Console) and .APK...');
     await runCmd('npx', ['--yes', '@bubblewrap/cli', 'build', '--skipPwaValidation']);
     console.log('\\nSuccess! Upload app-release-bundle.aab to Google Play Console.');
