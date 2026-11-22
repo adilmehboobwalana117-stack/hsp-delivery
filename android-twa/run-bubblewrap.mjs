@@ -61,20 +61,10 @@ function patchGeneratedAndroidProject(projectDir) {
   const gradlePropsPath = path.join(projectDir, 'gradle.properties');
   if (fs.existsSync(gradlePropsPath)) {
     let props = fs.readFileSync(gradlePropsPath, 'utf8');
-    const additions = [];
     if (!props.includes('android.suppressUnsupportedCompileSdk=')) {
-      additions.push('android.suppressUnsupportedCompileSdk=36');
-    }
-    if (!props.includes('android.r8.failOnMissingClasses=')) {
-      additions.push('android.r8.failOnMissingClasses=false');
-    }
-    if (!props.includes('android.defaults.buildfeatures.resvalues=')) {
-      additions.push('android.defaults.buildfeatures.resvalues=true');
-    }
-    if (additions.length > 0) {
-      props = props.trimEnd() + '\n' + additions.join('\n') + '\n';
+      props = props.trimEnd() + '\nandroid.suppressUnsupportedCompileSdk=36\n';
       fs.writeFileSync(gradlePropsPath, props);
-      console.log('[HSP Builder] Patched gradle.properties: added AGP 8.9 / SDK 36 / resValues flags');
+      console.log('[HSP Builder] Patched gradle.properties: added android.suppressUnsupportedCompileSdk=36');
     }
   }
 

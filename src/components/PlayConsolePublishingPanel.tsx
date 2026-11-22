@@ -370,7 +370,7 @@ async function main() {
     if (fs.existsSync(gradleProps)) {
       const p = fs.readFileSync(gradleProps, 'utf8');
       if (!p.includes('android.suppressUnsupportedCompileSdk=')) {
-        fs.writeFileSync(gradleProps, p.trimEnd() + '\\nandroid.suppressUnsupportedCompileSdk=36\\nandroid.r8.failOnMissingClasses=false\\nandroid.defaults.buildfeatures.resvalues=true\\n');
+        fs.writeFileSync(gradleProps, p.trimEnd() + '\\nandroid.suppressUnsupportedCompileSdk=36\\n');
       }
     }
     const appGradle = path.join(__dirname, 'app', 'build.gradle');

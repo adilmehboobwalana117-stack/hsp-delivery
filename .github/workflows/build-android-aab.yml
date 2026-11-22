@@ -171,6 +171,8 @@ jobs:
           ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace > gradle-build.log 2>&1 || GRADLE_EXIT=$?
           cat gradle-build.log
           if [ "$GRADLE_EXIT" -ne 0 ]; then
+            ERR_SUMMARY="$(grep -m 1 -E '^(> |FAILURE:|Execution failed for task|ERROR:)' gradle-build.log || tail -n 1 gradle-build.log)"
+            echo "::error title=Gradle Build Failed::$ERR_SUMMARY"
             echo "### Gradle Build Failure (last 40 lines)" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             tail -n 40 gradle-build.log >> "$GITHUB_STEP_SUMMARY"
