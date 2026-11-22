@@ -103,8 +103,8 @@ export function PlayConsolePublishingPanel({
     const twaManifest = {
       packageId: cleanPkg,
       host,
-      name: `${appTitle} — Hasilpur & Pakistan Delivery`,
-      launcherName: appTitle.slice(0, 12),
+      name: `${appTitle.replace(/\s*&\s*/g, ' and ')} - Hasilpur and Pakistan Delivery`,
+      launcherName: appTitle.replace(/\s*&\s*/g, ' and ').slice(0, 12),
       display: 'standalone',
       themeColor: '#07070A',
       themeColorDark: '#07070A',
@@ -127,7 +127,7 @@ export function PlayConsolePublishingPanel({
       appVersionCode: 1,
       shortcuts: [
         {
-          name: 'Order Food & Shops',
+          name: 'Order Food and Shops',
           shortName: 'Order Now',
           url: `${cleanUrl}/?tab=order`,
           chosenIconUrl: `${cleanUrl}/pwa-192x192.png`,
@@ -315,8 +315,8 @@ async function main() {
   const manifest = {
     packageId: ${JSON.stringify(cleanPkg)},
     host: ${JSON.stringify(host)},
-    name: ${JSON.stringify(`${appTitle} — Hasilpur & Pakistan Delivery`)},
-    launcherName: ${JSON.stringify(appTitle.slice(0, 12))},
+    name: ${JSON.stringify(`${appTitle.replace(/\s*&\s*/g, ' and ')} - Hasilpur and Pakistan Delivery`)},
+    launcherName: ${JSON.stringify(appTitle.replace(/\s*&\s*/g, ' and ').slice(0, 12))},
     display: 'standalone',
     themeColor: '#07070A',
     themeColorDark: '#07070A',
@@ -335,7 +335,7 @@ async function main() {
     appVersionName: '1.0.0',
     appVersionCode: 1,
     shortcuts: [
-      { name: 'Order Food & Shops', shortName: 'Order Now', url: ${JSON.stringify(`${cleanUrl}/?tab=order`)}, chosenIconUrl: localBase + '/pwa-192x192.png' },
+      { name: 'Order Food and Shops', shortName: 'Order Now', url: ${JSON.stringify(`${cleanUrl}/?tab=order`)}, chosenIconUrl: localBase + '/pwa-192x192.png' },
       { name: 'Track Live Delivery', shortName: 'Track Order', url: ${JSON.stringify(`${cleanUrl}/?tab=track`)}, chosenIconUrl: localBase + '/pwa-192x192.png' },
       { name: 'Rider Dispatch', shortName: 'Rider', url: ${JSON.stringify(`${cleanUrl}/?tab=rider`)}, chosenIconUrl: localBase + '/pwa-192x192.png' },
     ],
@@ -352,6 +352,14 @@ async function main() {
   try {
     console.log('[1/2] Generating Android project (serving local PNG icons at ' + localBase + ')...');
     await runCmd('npx', ['--yes', '@bubblewrap/cli', 'update', '--skipVersionUpgrade']);
+    const rootGradle = path.join(__dirname, 'build.gradle');
+    if (fs.existsSync(rootGradle)) {
+      fs.writeFileSync(rootGradle, fs.readFileSync(rootGradle, 'utf8').replace(/jcenter\\(\\)/g, 'mavenCentral()'));
+    }
+    const manifestXml = path.join(__dirname, 'app', 'src', 'main', 'AndroidManifest.xml');
+    if (fs.existsSync(manifestXml)) {
+      fs.writeFileSync(manifestXml, fs.readFileSync(manifestXml, 'utf8').replace(/(<manifest\\b[^>]*?)\\s+package="[^"]*"/, '$1'));
+    }
     console.log('[2/2] Building signed .AAB (Play Console) and .APK...');
     await runCmd('npx', ['--yes', '@bubblewrap/cli', 'build', '--skipPwaValidation']);
     console.log('\\nSuccess! Upload app-release-bundle.aab to Google Play Console.');

@@ -1,7 +1,7 @@
 {
   "packageId": "com.hspdelivery.app",
   "host": "ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app",
-  "name": "HSP delivery — Hasilpur & Pakistan Delivery",
+  "name": "HSP delivery - Hasilpur and Pakistan Delivery",
   "launcherName": "HSP delivery",
   "display": "standalone",
   "themeColor": "#07070A",
@@ -25,7 +25,7 @@
   "appVersionCode": 1,
   "shortcuts": [
     {
-      "name": "Order Food & Shops",
+      "name": "Order Food and Shops",
       "shortName": "Order Now",
       "url": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/?tab=order",
       "chosenIconUrl": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/pwa-192x192.png"

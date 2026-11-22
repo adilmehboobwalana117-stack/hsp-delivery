@@ -12,6 +12,10 @@
  *      `AndroidSdkTools.validatePath` accepts modern Android Studio & CI SDK layouts.
  *    - Repairs or resets broken `~/.bubblewrap/config.json` paths so Bubblewrap never
  *      crashes with `ERROR The provided androidSdk isn't correct.`.
+ * 3. Sanitizes XML-unsafe `&` characters in Android string values and patches
+ *    Bubblewrap's generated Gradle/Manifest files for AGP 8.9+ compatibility
+ *    (replaces deprecated `jcenter()` with `mavenCentral()` and removes deprecated
+ *    `package="..."` from `app/src/main/AndroidManifest.xml`).
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -23,6 +27,34 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const manifestPath = path.join(__dirname, 'twa-manifest.json');
 const updateOnly = process.argv.includes('--update-only');
+
+function sanitizeAndroidString(value) {
+  if (typeof value !== 'string') return value;
+  return value.replace(/\s*&\s*/g, ' and ').replace(/\u2014/g, '-');
+}
+
+function patchGeneratedAndroidProject(projectDir) {
+  const rootGradlePath = path.join(projectDir, 'build.gradle');
+  if (fs.existsSync(rootGradlePath)) {
+    const content = fs.readFileSync(rootGradlePath, 'utf8');
+    const updated = content.replace(/jcenter\(\)/g, 'mavenCentral()');
+    if (updated !== content) {
+      fs.writeFileSync(rootGradlePath, updated);
+      console.log('[HSP Builder] Patched build.gradle: replaced deprecated jcenter() with mavenCentral()');
+    }
+  }
+
+  const androidManifestPath = path.join(projectDir, 'app', 'src', 'main', 'AndroidManifest.xml');
+  if (fs.existsSync(androidManifestPath)) {
+    const content = fs.readFileSync(androidManifestPath, 'utf8');
+    // AGP 8+ fails if <manifest ... package="..."> is present alongside namespace in app/build.gradle
+    const updated = content.replace(/(<manifest\b[^>]*?)\s+package="[^"]*"/, '$1');
+    if (updated !== content) {
+      fs.writeFileSync(androidManifestPath, updated);
+      console.log('[HSP Builder] Patched AndroidManifest.xml: removed deprecated package attribute for AGP 8+');
+    }
+  }
+}
 
 function findCmdlineToolsBin(sdkPath) {
   const latestBin = path.join(sdkPath, 'cmdline-tools', 'latest', 'bin');
@@ -133,8 +165,6 @@ function ensureBubblewrapSdkCompat() {
       console.log(`[HSP Builder] Configured Bubblewrap Android SDK at ${resolvedSdk}`);
     }
   } else if (hadConfig && config.androidSdkPath) {
-    // Broken stale androidSdkPath in ~/.bubblewrap/config.json causes "The provided androidSdk isn't correct."
-    // Back it up and remove it so Bubblewrap cleanly prompts to auto-install its own Android SDK.
     const backupPath = `${bwConfigPath}.bak`;
     try {
       fs.copyFileSync(bwConfigPath, backupPath);
@@ -191,7 +221,6 @@ async function main() {
     '/pwa-192x192.png': resolveIconBuffer('pwa-192x192.png'),
   };
 
-  // Start local strict image/png server on an ephemeral localhost port
   const server = http.createServer((req, res) => {
     const reqPath = (req.url || '/').split('?')[0];
     const buf = icons[reqPath];
@@ -217,9 +246,9 @@ async function main() {
   const originalManifestText = fs.readFileSync(manifestPath, 'utf8');
   const manifest = JSON.parse(originalManifestText);
 
-  // Point Bubblewrap icon fetches to local strict image/png server while preserving live app host/URLs.
-  // Also omit webManifestUrl during update/build so Bubblewrap never fetches HTML from an auth-gated URL.
   delete manifest.webManifestUrl;
+  manifest.name = sanitizeAndroidString(manifest.name);
+  manifest.launcherName = sanitizeAndroidString(manifest.launcherName);
   manifest.appVersion = manifest.appVersion || manifest.appVersionName || '1.0.0';
   manifest.appVersionName = manifest.appVersionName || manifest.appVersion || '1.0.0';
   manifest.iconUrl = `${localBase}/pwa-512x512.png`;
@@ -227,6 +256,8 @@ async function main() {
   if (Array.isArray(manifest.shortcuts)) {
     manifest.shortcuts = manifest.shortcuts.map((shortcut) => ({
       ...shortcut,
+      name: sanitizeAndroidString(shortcut.name),
+      shortName: sanitizeAndroidString(shortcut.shortName),
       chosenIconUrl: `${localBase}/pwa-192x192.png`,
     }));
   }
@@ -239,6 +270,8 @@ async function main() {
       ['--yes', '@bubblewrap/cli', 'update', '--skipVersionUpgrade'],
       __dirname
     );
+
+    patchGeneratedAndroidProject(__dirname);
 
     if (!updateOnly) {
       console.log('[2/2] Building signed Android App Bundle (.aab) and APK (.apk)...');
@@ -253,7 +286,6 @@ async function main() {
       console.log('  - Direct Test APK:     android-twa/app-release-signed.apk');
     }
   } finally {
-    // Restore original manifest URLs and stop local icon server
     fs.writeFileSync(manifestPath, originalManifestText);
     server.close();
   }

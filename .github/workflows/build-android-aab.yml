@@ -38,63 +38,64 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Android SDK Command-Line Tools
+        uses: android-actions/setup-android@v3
+
       - name: Prepare Android SDK (API 36, Build-Tools & Bubblewrap Compatibility)
         id: android_sdk
         shell: bash
         run: |
-          set -e
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "Resolved ANDROID SDK_ROOT: $SDK_ROOT"
           if [ ! -d "$SDK_ROOT" ]; then
-            echo "Android SDK directory not found at $SDK_ROOT"
+            echo "ERROR: Android SDK directory not found at $SDK_ROOT"
             exit 1
           fi
 
-          # Ensure current runner user can write licenses, platforms, and symlink inside SDK_ROOT
-          if [ ! -w "$SDK_ROOT" ]; then
-            sudo chown -R "$(id -u):$(id -g)" "$SDK_ROOT" || true
+          # Ensure runner owns SDK_ROOT and all subdirectories (licenses, platforms, build-tools)
+          sudo chown -R "$(id -u):$(id -g)" "$SDK_ROOT" 2>/dev/null || true
+
+          # Locate sdkmanager inside cmdline-tools or PATH
+          SDKMANAGER="$(command -v sdkmanager 2>/dev/null || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            for candidate in \
+              "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+              "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager \
+              "$SDK_ROOT/tools/bin/sdkmanager"; do
+              if [ -x "$candidate" ]; then
+                SDKMANAGER="$candidate"
+                break
+              fi
+            done
           fi
 
-          # Locate sdkmanager inside modern cmdline-tools or legacy tools layout
-          SDKMANAGER=""
-          for candidate in \
-            "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
-            "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager \
-            "$SDK_ROOT/tools/bin/sdkmanager"; do
-            if [ -x "$candidate" ]; then
-              SDKMANAGER="$candidate"
-              break
-            fi
-          done
-
           if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager not found inside $SDK_ROOT"
+            echo "ERROR: sdkmanager not found inside $SDK_ROOT"
             ls -la "$SDK_ROOT"
             exit 1
           fi
 
           SDKMANAGER_DIR="$(dirname "$SDKMANAGER")"
-          echo "Using Android SDK: $SDK_ROOT"
-          echo "Using sdkmanager:  $SDKMANAGER"
+          echo "Using sdkmanager: $SDKMANAGER"
 
           # Bubblewrap's AndroidSdkTools.validatePath requires <sdkPath>/tools or <sdkPath>/bin.
-          # Modern GitHub Actions runners use cmdline-tools/latest/bin instead, so add a bin symlink.
           if [ ! -e "$SDK_ROOT/bin" ] && [ ! -e "$SDK_ROOT/tools" ]; then
             ln -s "$SDKMANAGER_DIR" "$SDK_ROOT/bin" 2>/dev/null || sudo ln -s "$SDKMANAGER_DIR" "$SDK_ROOT/bin"
           fi
 
-          # Accept all Android SDK licenses (ignore SIGPIPE from yes)
-          yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
+          # Accept all Android SDK licenses non-interactively
+          yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null 2>&1 || true
 
           # Install Android API 36 platform (required by Bubblewrap's compileSdkVersion 36)
           if [ ! -d "$SDK_ROOT/platforms/android-36" ]; then
             echo "Installing platforms;android-36..."
-            "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-36"
+            yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-36"
           fi
 
-          # Ensure a recent build-tools package with zipalign + apksigner is available
+          # Ensure a recent build-tools package containing zipalign & apksigner is installed
           if ! ls -d "$SDK_ROOT"/build-tools/36.* >/dev/null 2>&1; then
-            "$SDKMANAGER" --sdk_root="$SDK_ROOT" "build-tools;36.0.0" || \
-            "$SDKMANAGER" --sdk_root="$SDK_ROOT" "build-tools;35.0.0" || true
+            (yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "build-tools;36.0.0") || \
+            (yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "build-tools;35.0.0") || true
           fi
 
           # Write Bubblewrap config with verified JDK and SDK paths
@@ -119,7 +120,6 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          set -e
           if [ -n "${KEYSTORE_BASE64:-}" ]; then
             STORE_PASS="${KEYSTORE_PASSWORD:-}"
             KEY_PASS="${KEY_PASSWORD:-$STORE_PASS}"
@@ -141,11 +141,10 @@ jobs:
           echo "store_pass=$STORE_PASS" >> "$GITHUB_OUTPUT"
           echo "key_pass=$KEY_PASS" >> "$GITHUB_OUTPUT"
 
-          # Capture keytool output in a variable and parse with awk (avoids SIGPIPE from head -n 1)
           KEYTOOL_OUT="$(keytool -list -v -keystore hsp-delivery-release.keystore -alias hspdelivery -storepass "$STORE_PASS")"
           SHA256="$(awk '/SHA256:/ { print $2; exit }' <<< "$KEYTOOL_OUT")"
           if [ -z "$SHA256" ]; then
-            echo "Could not extract SHA-256 fingerprint from keystore"
+            echo "ERROR: Could not extract SHA-256 fingerprint from keystore"
             exit 1
           fi
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
@@ -161,12 +160,15 @@ jobs:
         run: |
           node -e '
             const fs = require("fs");
+            const sanitize = (s) => typeof s === "string" ? s.replace(/\s*&\s*/g, " and ").replace(/\u2014/g, "-") : s;
             const cleanUrl = process.env.INPUT_URL.replace(/\/+$/, "");
             const host = new URL(cleanUrl).host;
             const vName = process.env.INPUT_VNAME || "1.0.0";
             const m = JSON.parse(fs.readFileSync("twa-manifest.json", "utf8"));
             m.packageId = process.env.INPUT_PKG;
             m.host = host;
+            m.name = sanitize(m.name);
+            m.launcherName = sanitize(m.launcherName);
             m.iconUrl = cleanUrl + "/pwa-512x512.png";
             m.maskableIconUrl = cleanUrl + "/pwa-maskable-512x512.png";
             m.webManifestUrl = cleanUrl + "/manifest.webmanifest";
@@ -176,6 +178,8 @@ jobs:
             m.appVersionName = vName;
             m.shortcuts = (m.shortcuts || []).map((s) => ({
               ...s,
+              name: sanitize(s.name),
+              shortName: sanitize(s.shortName),
               url: cleanUrl + new URL(s.url).pathname + new URL(s.url).search,
               chosenIconUrl: cleanUrl + "/pwa-192x192.png",
             }));
@@ -195,23 +199,16 @@ jobs:
           STORE_PASS: ${{ steps.keystore.outputs.store_pass }}
           KEY_PASS: ${{ steps.keystore.outputs.key_pass }}
         run: |
-          set -e
           echo "sdk.dir=$SDK_ROOT" > local.properties
-
-          # Replace deprecated jcenter() in Bubblewrap's generated build.gradle with mavenCentral()
-          if [ -f build.gradle ]; then
-            sed -i 's/jcenter()/mavenCentral()/g' build.gradle
-          fi
-
           chmod +x ./gradlew
 
           # Build both release Android App Bundle (.aab) and release APK (.apk)
-          ./gradlew bundleRelease assembleRelease --no-daemon
+          ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
 
           # Sign the Play Console Android App Bundle (.aab) with jarsigner
           RAW_AAB="app/build/outputs/bundle/release/app-release.aab"
           if [ ! -f "$RAW_AAB" ]; then
-            echo "Expected AAB not found at $RAW_AAB"
+            echo "ERROR: Expected AAB not found at $RAW_AAB"
             exit 1
           fi
           cp "$RAW_AAB" app-release-bundle.aab
@@ -232,7 +229,7 @@ jobs:
           done
 
           if [ -z "$BUILD_TOOLS_DIR" ]; then
-            echo "Could not find zipalign and apksigner under $SDK_ROOT/build-tools/"
+            echo "ERROR: Could not find zipalign and apksigner under $SDK_ROOT/build-tools/"
             ls -la "$SDK_ROOT/build-tools" || true
             exit 1
           fi
@@ -243,7 +240,7 @@ jobs:
             RAW_APK="app/build/outputs/apk/release/app-release.apk"
           fi
           if [ ! -f "$RAW_APK" ]; then
-            echo "Expected APK not found under app/build/outputs/apk/release/"
+            echo "ERROR: Expected APK not found under app/build/outputs/apk/release/"
             ls -la app/build/outputs/apk/release/ || true
             exit 1
           fi
