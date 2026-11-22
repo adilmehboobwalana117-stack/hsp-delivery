@@ -38,10 +38,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK (API 36 & Build-Tools 36.0.0)
+      - name: Setup Android SDK (API 36 & Build-Tools 35/36)
         uses: android-actions/setup-android@v4
         with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 build-tools;35.0.0'
 
       - name: Configure Bubblewrap SDK & JDK Paths
         id: android_sdk
@@ -49,6 +49,7 @@ jobs:
         run: |
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           echo "Using Android SDK: $SDK_ROOT"
+          sudo chown -R "$(id -u):$(id -g)" "$SDK_ROOT" 2>/dev/null || true
 
           # Bubblewrap's AndroidSdkTools.validatePath requires <sdkPath>/tools or <sdkPath>/bin.
           if [ ! -e "$SDK_ROOT/bin" ] && [ ! -e "$SDK_ROOT/tools" ]; then
@@ -168,11 +169,14 @@ jobs:
           chmod +x ./gradlew
 
           GRADLE_EXIT=0
-          ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace > gradle-build.log 2>&1 || GRADLE_EXIT=$?
+          ./gradlew bundleRelease assembleRelease --no-daemon > gradle-build.log 2>&1 || GRADLE_EXIT=$?
           cat gradle-build.log
           if [ "$GRADLE_EXIT" -ne 0 ]; then
-            ERR_SUMMARY="$(grep -m 1 -E '^(> |FAILURE:|Execution failed for task|ERROR:)' gradle-build.log || tail -n 1 gradle-build.log)"
-            echo "::error title=Gradle Build Failed::$ERR_SUMMARY"
+            ERR_BLOCK="$(awk '/^\* What went wrong:/{flag=1; next} /^\* Try:/{flag=0} flag && NF {print}' gradle-build.log | tr '\n' ' ' | cut -c1-500)"
+            if [ -z "$ERR_BLOCK" ]; then
+              ERR_BLOCK="$(awk '/Execution failed for task|AAPT:|error:|Caused by:/ { print; count++; if (count >= 5) exit }' gradle-build.log | tr '\n' ' ' | cut -c1-500)"
+            fi
+            echo "::error title=Gradle Build Failed::${ERR_BLOCK:-Check gradle-build.log}"
             echo "### Gradle Build Failure (last 40 lines)" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             tail -n 40 gradle-build.log >> "$GITHUB_STEP_SUMMARY"

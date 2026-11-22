@@ -88,8 +88,6 @@ function patchGeneratedAndroidProject(projectDir) {
                 storePassword System.getenv('HSP_STORE_PASS')
                 keyAlias 'hspdelivery'
                 keyPassword System.getenv('HSP_KEY_PASS') ?: System.getenv('HSP_STORE_PASS')
-                enableV1Signing true
-                enableV2Signing true
             }
         }
     }
