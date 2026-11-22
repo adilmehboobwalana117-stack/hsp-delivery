@@ -3,9 +3,10 @@
  * HSP delivery — Bulletproof Bubblewrap Android .AAB & .APK Runner
  *
  * Serves local PNG icons over 127.0.0.1 with strict `Content-Type: image/png`
- * during `bubblewrap update` & `bubblewrap build` so Bubblewrap NEVER fails
- * with `invalid Content-Type "text/html"` when the remote host sits behind an
- * auth proxy or interstitial page.
+ * and omits remote `webManifestUrl` during `bubblewrap update` & `bubblewrap build`
+ * so Bubblewrap NEVER fails with `invalid Content-Type "text/html"` or
+ * `Unexpected token '<', "<!doctype "... is not valid JSON` when the remote host
+ * sits behind an auth proxy or interstitial page.
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -15,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const manifestPath = path.join(__dirname, 'twa-manifest.json');
+const updateOnly = process.argv.includes('--update-only');
 
 function resolveIconBuffer(filename) {
   const candidates = [
@@ -83,7 +85,9 @@ async function main() {
   const originalManifestText = fs.readFileSync(manifestPath, 'utf8');
   const manifest = JSON.parse(originalManifestText);
 
-  // Point Bubblewrap icon fetches to local strict image/png server while preserving live app host/URLs
+  // Point Bubblewrap icon fetches to local strict image/png server while preserving live app host/URLs.
+  // Also omit webManifestUrl during update/build so Bubblewrap never fetches HTML from an auth-gated URL.
+  delete manifest.webManifestUrl;
   manifest.iconUrl = `${localBase}/pwa-512x512.png`;
   manifest.maskableIconUrl = `${localBase}/pwa-maskable-512x512.png`;
   if (Array.isArray(manifest.shortcuts)) {
@@ -96,14 +100,24 @@ async function main() {
 
   try {
     console.log('[1/2] Updating Android Gradle project from twa-manifest.json...');
-    await runCommand('npx', ['--yes', '@bubblewrap/cli', 'update', '--skipVersionUpgrade'], __dirname);
+    await runCommand(
+      'npx',
+      ['--yes', '@bubblewrap/cli', 'update', '--skipVersionUpgrade'],
+      __dirname
+    );
 
-    console.log('[2/2] Building signed Android App Bundle (.aab) and APK (.apk)...');
-    await runCommand('npx', ['--yes', '@bubblewrap/cli', 'build', '--skipPwaValidation'], __dirname);
+    if (!updateOnly) {
+      console.log('[2/2] Building signed Android App Bundle (.aab) and APK (.apk)...');
+      await runCommand(
+        'npx',
+        ['--yes', '@bubblewrap/cli', 'build', '--skipPwaValidation'],
+        __dirname
+      );
 
-    console.log('\n[HSP Builder] Build complete!');
-    console.log('  - Play Console Bundle: android-twa/app-release-bundle.aab');
-    console.log('  - Direct Test APK:     android-twa/app-release-signed.apk');
+      console.log('\n[HSP Builder] Build complete!');
+      console.log('  - Play Console Bundle: android-twa/app-release-bundle.aab');
+      console.log('  - Direct Test APK:     android-twa/app-release-signed.apk');
+    }
   } finally {
     // Restore original manifest URLs and stop local icon server
     fs.writeFileSync(manifestPath, originalManifestText);

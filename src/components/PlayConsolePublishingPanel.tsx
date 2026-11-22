@@ -272,7 +272,6 @@ async function main() {
       { name: 'Rider Dispatch', shortName: 'Rider', url: ${JSON.stringify(`${cleanUrl}/?tab=rider`)}, chosenIconUrl: localBase + '/pwa-192x192.png' },
     ],
     generatorApp: 'bubblewrap-cli',
-    webManifestUrl: ${JSON.stringify(`${cleanUrl}/manifest.webmanifest`)},
     fallbackType: 'customtabs',
     features: { locationDelegation: { enabled: true }, playBilling: { enabled: false } },
     enableSiteSettingsShortcut: true,
