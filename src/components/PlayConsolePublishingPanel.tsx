@@ -122,6 +122,7 @@ export function PlayConsolePublishingPanel({
         path: './hsp-delivery-release.keystore',
         alias: 'hspdelivery',
       },
+      appVersion: '1.0.0',
       appVersionName: '1.0.0',
       appVersionCode: 1,
       shortcuts: [
@@ -205,11 +206,76 @@ export function PlayConsolePublishingPanel({
 // Fixes Bubblewrap "invalid Content-Type text/html" by serving embedded PNG icons locally.
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function findCmdlineToolsBin(sdkPath) {
+  const latestBin = path.join(sdkPath, 'cmdline-tools', 'latest', 'bin');
+  if (fs.existsSync(latestBin)) return latestBin;
+  const root = path.join(sdkPath, 'cmdline-tools');
+  if (fs.existsSync(root)) {
+    for (const entry of fs.readdirSync(root)) {
+      const candidate = path.join(root, entry, 'bin');
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+function isValidSdk(sdkPath) {
+  if (!sdkPath || !fs.existsSync(sdkPath)) return false;
+  if (fs.existsSync(path.join(sdkPath, 'tools')) || fs.existsSync(path.join(sdkPath, 'bin'))) return true;
+  const cmdBin = findCmdlineToolsBin(sdkPath);
+  if (cmdBin) {
+    try {
+      fs.symlinkSync(cmdBin, path.join(sdkPath, 'bin'), process.platform === 'win32' ? 'junction' : 'dir');
+      return true;
+    } catch {}
+  }
+  return false;
+}
+
+function ensureBubblewrapSdkCompat() {
+  const home = os.homedir();
+  const bwDir = path.join(home, '.bubblewrap');
+  const bwConfigPath = path.join(bwDir, 'config.json');
+  let config = {};
+  const hadConfig = fs.existsSync(bwConfigPath);
+  if (hadConfig) {
+    try { config = JSON.parse(fs.readFileSync(bwConfigPath, 'utf8')); } catch { config = {}; }
+  }
+  const sdkCandidates = [
+    config.androidSdkPath,
+    process.env.ANDROID_HOME,
+    process.env.ANDROID_SDK_ROOT,
+    path.join(bwDir, 'android_sdk'),
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Android', 'Sdk') : '',
+    path.join(home, 'Library', 'Android', 'sdk'),
+    path.join(home, 'Android', 'Sdk'),
+    '/usr/local/lib/android/sdk',
+  ].filter(Boolean);
+
+  const resolvedSdk = sdkCandidates.find((p) => isValidSdk(p)) || '';
+  const resolvedJdk = [config.jdkPath, process.env.JAVA_HOME].find((p) => p && fs.existsSync(path.join(p, 'bin'))) || '';
+
+  if (resolvedSdk) {
+    fs.mkdirSync(bwDir, { recursive: true });
+    fs.writeFileSync(
+      bwConfigPath,
+      JSON.stringify({ ...config, ...(resolvedJdk ? { jdkPath: resolvedJdk } : {}), androidSdkPath: resolvedSdk }, null, 2)
+    );
+  } else if (hadConfig && config.androidSdkPath) {
+    try {
+      fs.copyFileSync(bwConfigPath, bwConfigPath + '.bak');
+      fs.unlinkSync(bwConfigPath);
+      console.log('[HSP Builder] Reset invalid Android SDK path in ~/.bubblewrap/config.json so Bubblewrap can auto-install a valid SDK.');
+    } catch {}
+  }
+}
 const ICONS = {
   '/pwa-512x512.png': Buffer.from(${JSON.stringify(icon512B64)}, 'base64'),
   '/pwa-maskable-512x512.png': Buffer.from(${JSON.stringify(maskable512B64)}, 'base64'),
@@ -229,6 +295,7 @@ function runCmd(cmd, args) {
 }
 
 async function main() {
+  ensureBubblewrapSdkCompat();
   const server = http.createServer((req, res) => {
     const p = (req.url || '/').split('?')[0];
     const buf = ICONS[p];
@@ -264,6 +331,7 @@ async function main() {
     maskableIconUrl: localBase + '/pwa-maskable-512x512.png',
     splashScreenFadeOutDuration: 300,
     signingKey: { path: './hsp-delivery-release.keystore', alias: 'hspdelivery' },
+    appVersion: '1.0.0',
     appVersionName: '1.0.0',
     appVersionCode: 1,
     shortcuts: [

@@ -2,14 +2,20 @@
 /**
  * HSP delivery — Bulletproof Bubblewrap Android .AAB & .APK Runner
  *
- * Serves local PNG icons over 127.0.0.1 with strict `Content-Type: image/png`
- * and omits remote `webManifestUrl` during `bubblewrap update` & `bubblewrap build`
- * so Bubblewrap NEVER fails with `invalid Content-Type "text/html"` or
- * `Unexpected token '<', "<!doctype "... is not valid JSON` when the remote host
- * sits behind an auth proxy or interstitial page.
+ * 1. Serves local PNG icons over 127.0.0.1 with strict `Content-Type: image/png`
+ *    and omits remote `webManifestUrl` during `bubblewrap update` & `bubblewrap build`
+ *    so Bubblewrap NEVER fails with `invalid Content-Type "text/html"` or
+ *    `Unexpected token '<', "<!doctype "... is not valid JSON`.
+ * 2. Auto-detects and repairs Android SDK / JDK paths for both GitHub Actions and
+ *    local Windows/macOS/Linux PCs:
+ *    - Links `<sdkPath>/cmdline-tools/latest/bin` to `<sdkPath>/bin` so Bubblewrap's
+ *      `AndroidSdkTools.validatePath` accepts modern Android Studio & CI SDK layouts.
+ *    - Repairs or resets broken `~/.bubblewrap/config.json` paths so Bubblewrap never
+ *      crashes with `ERROR The provided androidSdk isn't correct.`.
  */
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +23,130 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const manifestPath = path.join(__dirname, 'twa-manifest.json');
 const updateOnly = process.argv.includes('--update-only');
+
+function findCmdlineToolsBin(sdkPath) {
+  const latestBin = path.join(sdkPath, 'cmdline-tools', 'latest', 'bin');
+  if (fs.existsSync(latestBin)) return latestBin;
+
+  const cmdlineRoot = path.join(sdkPath, 'cmdline-tools');
+  if (fs.existsSync(cmdlineRoot)) {
+    for (const entry of fs.readdirSync(cmdlineRoot)) {
+      const candidate = path.join(cmdlineRoot, entry, 'bin');
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+function isValidBubblewrapSdk(sdkPath) {
+  if (!sdkPath || !fs.existsSync(sdkPath)) return false;
+  if (fs.existsSync(path.join(sdkPath, 'tools')) || fs.existsSync(path.join(sdkPath, 'bin'))) {
+    return true;
+  }
+  const cmdlineBin = findCmdlineToolsBin(sdkPath);
+  if (cmdlineBin) {
+    const binDir = path.join(sdkPath, 'bin');
+    try {
+      fs.symlinkSync(cmdlineBin, binDir, process.platform === 'win32' ? 'junction' : 'dir');
+      console.log(`[HSP Builder] Linked ${binDir} -> ${cmdlineBin} for Bubblewrap SDK validation`);
+      return true;
+    } catch (err) {
+      console.warn(
+        `[HSP Builder] Warning: Could not link ${binDir} -> ${cmdlineBin}: ${
+          err instanceof Error ? err.message : err
+        }`
+      );
+    }
+  }
+  return false;
+}
+
+function findValidJdkPath(existingJdkPath) {
+  const home = os.homedir();
+  const candidates = [existingJdkPath, process.env.JAVA_HOME];
+
+  const bwJdkRoot = path.join(home, '.bubblewrap', 'jdk');
+  if (fs.existsSync(bwJdkRoot)) {
+    for (const entry of fs.readdirSync(bwJdkRoot)) {
+      candidates.push(path.join(bwJdkRoot, entry));
+      candidates.push(path.join(bwJdkRoot, entry, 'Contents', 'Home'));
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(path.join(candidate, 'bin'))) {
+      return candidate;
+    }
+  }
+  return '';
+}
+
+function ensureBubblewrapSdkCompat() {
+  const home = os.homedir();
+  const bwDir = path.join(home, '.bubblewrap');
+  const bwConfigPath = path.join(bwDir, 'config.json');
+
+  let config = {};
+  const hadConfig = fs.existsSync(bwConfigPath);
+  if (hadConfig) {
+    try {
+      config = JSON.parse(fs.readFileSync(bwConfigPath, 'utf8'));
+    } catch {
+      config = {};
+    }
+  }
+
+  const sdkCandidates = [
+    config.androidSdkPath,
+    process.env.ANDROID_HOME,
+    process.env.ANDROID_SDK_ROOT,
+    path.join(bwDir, 'android_sdk'),
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Android', 'Sdk') : '',
+    path.join(home, 'Library', 'Android', 'sdk'),
+    path.join(home, 'Android', 'Sdk'),
+    '/usr/local/lib/android/sdk',
+  ].filter(Boolean);
+
+  let resolvedSdk = '';
+  for (const candidate of sdkCandidates) {
+    if (isValidBubblewrapSdk(candidate)) {
+      resolvedSdk = candidate;
+      break;
+    }
+  }
+
+  const resolvedJdk = findValidJdkPath(config.jdkPath);
+
+  if (resolvedSdk) {
+    if (
+      !hadConfig ||
+      config.androidSdkPath !== resolvedSdk ||
+      (resolvedJdk && config.jdkPath !== resolvedJdk)
+    ) {
+      fs.mkdirSync(bwDir, { recursive: true });
+      const nextConfig = {
+        ...config,
+        ...(resolvedJdk ? { jdkPath: resolvedJdk } : {}),
+        androidSdkPath: resolvedSdk,
+      };
+      fs.writeFileSync(bwConfigPath, JSON.stringify(nextConfig, null, 2));
+      console.log(`[HSP Builder] Configured Bubblewrap Android SDK at ${resolvedSdk}`);
+    }
+  } else if (hadConfig && config.androidSdkPath) {
+    // Broken stale androidSdkPath in ~/.bubblewrap/config.json causes "The provided androidSdk isn't correct."
+    // Back it up and remove it so Bubblewrap cleanly prompts to auto-install its own Android SDK.
+    const backupPath = `${bwConfigPath}.bak`;
+    try {
+      fs.copyFileSync(bwConfigPath, backupPath);
+      fs.unlinkSync(bwConfigPath);
+      console.log(
+        `[HSP Builder] Reset invalid Android SDK config (backed up to ${backupPath}) so Bubblewrap can auto-install a valid SDK.`
+      );
+    } catch {
+      // Ignore cleanup failure
+    }
+  }
+}
 
 function resolveIconBuffer(filename) {
   const candidates = [
@@ -53,6 +183,8 @@ async function main() {
     throw new Error(`twa-manifest.json not found at ${manifestPath}`);
   }
 
+  ensureBubblewrapSdkCompat();
+
   const icons = {
     '/pwa-512x512.png': resolveIconBuffer('pwa-512x512.png'),
     '/pwa-maskable-512x512.png': resolveIconBuffer('pwa-maskable-512x512.png'),
@@ -88,6 +220,8 @@ async function main() {
   // Point Bubblewrap icon fetches to local strict image/png server while preserving live app host/URLs.
   // Also omit webManifestUrl during update/build so Bubblewrap never fetches HTML from an auth-gated URL.
   delete manifest.webManifestUrl;
+  manifest.appVersion = manifest.appVersion || manifest.appVersionName || '1.0.0';
+  manifest.appVersionName = manifest.appVersionName || manifest.appVersion || '1.0.0';
   manifest.iconUrl = `${localBase}/pwa-512x512.png`;
   manifest.maskableIconUrl = `${localBase}/pwa-maskable-512x512.png`;
   if (Array.isArray(manifest.shortcuts)) {
