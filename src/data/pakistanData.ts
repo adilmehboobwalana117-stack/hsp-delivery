@@ -38,7 +38,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   businessResponseSlaMinutes: 5,
   businessMaxMonthlyCancellations: 3,
   businessCancelPenaltyPkr: 150,
-  playAndroidPackageName: 'com.hspdelivery.app',
+  playAndroidPackageName: 'hspdelivery.com',
   playDeveloperName: 'HSP delivery',
 };
 

@@ -10,7 +10,7 @@ on:
       package_id:
         description: 'Android Package Name (Application ID)'
         required: true
-        default: 'com.hspdelivery.app'
+        default: 'hspdelivery.com'
       version_code:
         description: 'Android Version Code (increment for every Play Console upload)'
         required: true

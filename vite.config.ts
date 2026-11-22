@@ -71,8 +71,8 @@ export default defineConfig(() => {
           related_applications: [
             {
               platform: 'play',
-              url: 'https://play.google.com/store/apps/details?id=com.hspdelivery.app',
-              id: 'com.hspdelivery.app',
+              url: 'https://play.google.com/store/apps/details?id=hspdelivery.com',
+              id: 'hspdelivery.com',
             },
           ],
           scope_extensions: [
