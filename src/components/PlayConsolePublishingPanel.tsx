@@ -163,13 +163,154 @@ export function PlayConsolePublishingPanel({
     );
   };
 
+  const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        const commaIdx = result.indexOf(',');
+        resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result);
+      };
+      reader.onerror = () => reject(new Error('Failed to read icon asset'));
+      reader.readAsDataURL(blob);
+    });
+
+  const handleDownloadSelfContainedBuilder = async () => {
+    let host = 'ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app';
+    try {
+      host = new URL(cleanUrl).host;
+    } catch {
+      // fallback to default host
+    }
+    const cleanPkg = packageName.trim() || 'com.hspdelivery.app';
+    const appTitle = developerName.trim() || 'HSP delivery';
+
+    const fetchIconBase64 = async (path: string): Promise<string> => {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`Could not load ${path}`);
+      const blob = await res.blob();
+      return blobToBase64(blob);
+    };
+
+    try {
+      const [icon512B64, maskable512B64, icon192B64] = await Promise.all([
+        fetchIconBase64('/pwa-512x512.png'),
+        fetchIconBase64('/pwa-maskable-512x512.png'),
+        fetchIconBase64('/pwa-192x192.png'),
+      ]);
+
+      const script = `#!/usr/bin/env node
+// Self-contained HSP delivery Android .AAB & .APK Builder
+// Run: node build-hsp-android.mjs
+// Fixes Bubblewrap "invalid Content-Type text/html" by serving embedded PNG icons locally.
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ICONS = {
+  '/pwa-512x512.png': Buffer.from(${JSON.stringify(icon512B64)}, 'base64'),
+  '/pwa-maskable-512x512.png': Buffer.from(${JSON.stringify(maskable512B64)}, 'base64'),
+  '/pwa-192x192.png': Buffer.from(${JSON.stringify(icon192B64)}, 'base64'),
+};
+
+function runCmd(cmd, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      cwd: __dirname,
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+    });
+    child.on('error', reject);
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(cmd + ' exited ' + code))));
+  });
+}
+
+async function main() {
+  const server = http.createServer((req, res) => {
+    const p = (req.url || '/').split('?')[0];
+    const buf = ICONS[p];
+    if (buf) {
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': buf.length });
+      res.end(buf);
+      return;
+    }
+    res.writeHead(404);
+    res.end('Not found');
+  });
+
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const localBase = 'http://127.0.0.1:' + port;
+
+  const manifest = {
+    packageId: ${JSON.stringify(cleanPkg)},
+    host: ${JSON.stringify(host)},
+    name: ${JSON.stringify(`${appTitle} — Hasilpur & Pakistan Delivery`)},
+    launcherName: ${JSON.stringify(appTitle.slice(0, 12))},
+    display: 'standalone',
+    themeColor: '#07070A',
+    themeColorDark: '#07070A',
+    navigationColor: '#07070A',
+    navigationColorDark: '#07070A',
+    navigationDividerColor: '#F59E0B',
+    navigationDividerColorDark: '#F59E0B',
+    backgroundColor: '#07070A',
+    enableNotifications: true,
+    startUrl: '/',
+    iconUrl: localBase + '/pwa-512x512.png',
+    maskableIconUrl: localBase + '/pwa-maskable-512x512.png',
+    splashScreenFadeOutDuration: 300,
+    signingKey: { path: './hsp-delivery-release.keystore', alias: 'hspdelivery' },
+    appVersionName: '1.0.0',
+    appVersionCode: 1,
+    shortcuts: [
+      { name: 'Order Food & Shops', shortName: 'Order Now', url: ${JSON.stringify(`${cleanUrl}/?tab=order`)}, chosenIconUrl: localBase + '/pwa-192x192.png' },
+      { name: 'Track Live Delivery', shortName: 'Track Order', url: ${JSON.stringify(`${cleanUrl}/?tab=track`)}, chosenIconUrl: localBase + '/pwa-192x192.png' },
+      { name: 'Rider Dispatch', shortName: 'Rider', url: ${JSON.stringify(`${cleanUrl}/?tab=rider`)}, chosenIconUrl: localBase + '/pwa-192x192.png' },
+    ],
+    generatorApp: 'bubblewrap-cli',
+    webManifestUrl: ${JSON.stringify(`${cleanUrl}/manifest.webmanifest`)},
+    fallbackType: 'customtabs',
+    features: { locationDelegation: { enabled: true }, playBilling: { enabled: false } },
+    enableSiteSettingsShortcut: true,
+    fullScopeUrl: ${JSON.stringify(`${cleanUrl}/`)},
+    minSdkVersion: 23,
+    orientation: 'portrait',
+  };
+
+  fs.writeFileSync(path.join(__dirname, 'twa-manifest.json'), JSON.stringify(manifest, null, 2));
+  try {
+    console.log('[1/2] Generating Android project (serving local PNG icons at ' + localBase + ')...');
+    await runCmd('npx', ['--yes', '@bubblewrap/cli', 'update', '--skipVersionUpgrade']);
+    console.log('[2/2] Building signed .AAB (Play Console) and .APK...');
+    await runCmd('npx', ['--yes', '@bubblewrap/cli', 'build', '--skipPwaValidation']);
+    console.log('\\nSuccess! Upload app-release-bundle.aab to Google Play Console.');
+  } finally {
+    server.close();
+  }
+}
+
+main().catch((err) => {
+  console.error('Build failed:', err.message || err);
+  process.exit(1);
+});
+`;
+      downloadTextFile('build-hsp-android.mjs', script, 'text/javascript;charset=utf-8');
+    } catch {
+      setErrorMsg('Could not package embedded icons. Try downloading twa-manifest.json instead.');
+    }
+  };
+
   const handleDownloadWindowsBuilder = () => {
-    const bat = `@echo off\r\nsetlocal\r\necho Building HSP delivery Android .AAB (Play Console) and .APK...\r\ncd /d "%~dp0"\r\ncall npx --yes @bubblewrap/cli update --skipVersionUpgrade\r\nif errorlevel 1 exit /b 1\r\ncall npx --yes @bubblewrap/cli build --skipPwaValidation\r\nif errorlevel 1 exit /b 1\r\necho Done! Upload app-release-bundle.aab to Google Play Console.\r\npause\r\n`;
+    const bat = `@echo off\r\nsetlocal\r\necho Building HSP delivery Android .AAB (Play Console) and .APK...\r\ncd /d "%~dp0"\r\nif exist build-hsp-android.mjs (\r\n  node .\\build-hsp-android.mjs\r\n) else (\r\n  node .\\run-bubblewrap.mjs\r\n)\r\npause\r\n`;
     downloadTextFile('build-android.bat', bat);
   };
 
   const handleDownloadMacLinuxBuilder = () => {
-    const sh = `#!/usr/bin/env bash\nset -euo pipefail\ncd "$(dirname "$0")"\necho "Building HSP delivery Android .AAB & .APK..."\nnpx --yes @bubblewrap/cli update --skipVersionUpgrade\nnpx --yes @bubblewrap/cli build --skipPwaValidation\necho "Done! Upload app-release-bundle.aab to Google Play Console."\n`;
+    const sh = `#!/usr/bin/env bash\nset -euo pipefail\ncd "$(dirname "$0")"\nif [ -f "./build-hsp-android.mjs" ]; then\n  node ./build-hsp-android.mjs\nelse\n  node ./run-bubblewrap.mjs\nfi\n`;
     downloadTextFile('build-android.sh', sh);
   };
 
@@ -541,19 +682,28 @@ export function PlayConsolePublishingPanel({
             {/* Ready-to-Build Android .AAB & .APK Kit */}
             <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/35 space-y-2.5">
               <p className="text-[11px] font-extrabold uppercase tracking-wider text-yellow-300">
-                Download Android .AAB &amp; .APK Build Kit (No PWABuilder Needed)
+                Download 1-File Android .AAB &amp; .APK Builder (Fixes &ldquo;text/html&rdquo; Icon Error)
               </p>
               <p className="text-[11px] text-zinc-300 leading-relaxed">
-                Download your pre-configured <code className="text-amber-300">twa-manifest.json</code> + builder script into one folder and run it — or export this project to GitHub and click <strong>Actions → Build HSP delivery Android AAB &amp; APK → Run workflow</strong> to compile signed <code className="text-emerald-300">app-release-bundle.aab</code> &amp; <code className="text-emerald-300">app-release-signed.apk</code> in the cloud for free.
+                Download <code className="text-emerald-300">build-hsp-android.mjs</code> (embeds your real PNG icons and serves them locally with <code className="text-amber-300">image/png</code> during build so Bubblewrap never gets a <code className="text-rose-300">text/html</code> error) and run{' '}
+                <code className="text-yellow-300 font-bold">node build-hsp-android.mjs</code> — or run the GitHub Actions workflow in the cloud for free.
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={handleDownloadTwaManifest}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 text-[11px] font-extrabold hover:brightness-105"
+                  onClick={handleDownloadSelfContainedBuilder}
+                  className="btn-shimmer inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 text-[11px] font-extrabold hover:brightness-105"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Download twa-manifest.json
+                  Download build-hsp-android.mjs (Recommended)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadTwaManifest}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 text-[11px] font-bold hover:border-amber-400 hover:text-yellow-300"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  twa-manifest.json
                 </button>
                 <button
                   type="button"
@@ -561,7 +711,7 @@ export function PlayConsolePublishingPanel({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 text-[11px] font-bold hover:border-amber-400 hover:text-yellow-300"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Windows Builder (.bat)
+                  Windows (.bat)
                 </button>
                 <button
                   type="button"
@@ -569,7 +719,7 @@ export function PlayConsolePublishingPanel({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 text-[11px] font-bold hover:border-amber-400 hover:text-yellow-300"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Mac / Linux Builder (.sh)
+                  Mac/Linux (.sh)
                 </button>
               </div>
             </div>

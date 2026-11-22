@@ -110,8 +110,7 @@ jobs:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ steps.keystore.outputs.store_pass }}
           BUBBLEWRAP_KEY_PASSWORD: ${{ steps.keystore.outputs.key_pass }}
         run: |
-          npx --yes @bubblewrap/cli update --skipVersionUpgrade
-          npx --yes @bubblewrap/cli build --skipPwaValidation
+          node ./run-bubblewrap.mjs
 
       - name: Generate Matching assetlinks.json
         working-directory: android-twa
