@@ -48,10 +48,13 @@ function patchGeneratedAndroidProject(projectDir) {
   if (fs.existsSync(androidManifestPath)) {
     const content = fs.readFileSync(androidManifestPath, 'utf8');
     // AGP 8+ fails if <manifest ... package="..."> is present alongside namespace in app/build.gradle
-    const updated = content.replace(/(<manifest\b[^>]*?)\s+package="[^"]*"/, '$1');
+    const updated = content
+      .replace(/(<manifest\b[^>]*?)\s+package="[^"]*"/, '$1')
+      .replace(/android:name="Application"/g, 'android:name=".Application"')
+      .replace(/android:name="LauncherActivity"/g, 'android:name=".LauncherActivity"');
     if (updated !== content) {
       fs.writeFileSync(androidManifestPath, updated);
-      console.log('[HSP Builder] Patched AndroidManifest.xml: removed deprecated package attribute for AGP 8+');
+      console.log('[HSP Builder] Patched AndroidManifest.xml: AGP 8+ namespace & class references');
     }
   }
 
@@ -65,21 +68,56 @@ function patchGeneratedAndroidProject(projectDir) {
     if (!props.includes('android.r8.failOnMissingClasses=')) {
       additions.push('android.r8.failOnMissingClasses=false');
     }
+    if (!props.includes('android.defaults.buildfeatures.resvalues=')) {
+      additions.push('android.defaults.buildfeatures.resvalues=true');
+    }
     if (additions.length > 0) {
       props = props.trimEnd() + '\n' + additions.join('\n') + '\n';
       fs.writeFileSync(gradlePropsPath, props);
-      console.log('[HSP Builder] Patched gradle.properties: added AGP 8.9 / SDK 36 compatibility flags');
+      console.log('[HSP Builder] Patched gradle.properties: added AGP 8.9 / SDK 36 / resValues flags');
     }
   }
 
   const appGradlePath = path.join(projectDir, 'app', 'build.gradle');
   if (fs.existsSync(appGradlePath)) {
-    const content = fs.readFileSync(appGradlePath, 'utf8');
-    // Bubblewrap's locationdelegation:1.1.2 triggers R8 missing-class errors under AGP 8+ full mode
-    const updated = content.replace(/minifyEnabled\s+true/g, 'minifyEnabled false');
-    if (updated !== content) {
-      fs.writeFileSync(appGradlePath, updated);
-      console.log('[HSP Builder] Patched app/build.gradle: disabled R8 minification for locationdelegation AGP 8+ compatibility');
+    let content = fs.readFileSync(appGradlePath, 'utf8');
+    const original = content;
+    if (!content.includes('buildFeatures')) {
+      content = content.replace(
+        /namespace\s+"[^"]+"/,
+        (match) => `${match}\n    buildFeatures {\n        resValues = true\n    }`
+      );
+    }
+    if (!content.includes('signingConfigs')) {
+      content = content.replace(
+        /buildTypes\s*\{\s*release\s*\{\s*minifyEnabled\s+true\s*\}\s*\}/m,
+        `signingConfigs {
+        release {
+            if (System.getenv('HSP_STORE_PASS')) {
+                storeFile file('../hsp-delivery-release.keystore')
+                storePassword System.getenv('HSP_STORE_PASS')
+                keyAlias 'hspdelivery'
+                keyPassword System.getenv('HSP_KEY_PASS') ?: System.getenv('HSP_STORE_PASS')
+                enableV1Signing true
+                enableV2Signing true
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (System.getenv('HSP_STORE_PASS')) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled false
+        }
+    }`
+      );
+    } else {
+      content = content.replace(/minifyEnabled\s+true/g, 'minifyEnabled false');
+    }
+    if (content !== original) {
+      fs.writeFileSync(appGradlePath, content);
+      console.log('[HSP Builder] Patched app/build.gradle: enabled resValues, native release signing & AGP 8+ compatibility');
     }
   }
 }

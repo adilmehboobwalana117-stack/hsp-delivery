@@ -358,18 +358,28 @@ async function main() {
     }
     const manifestXml = path.join(__dirname, 'app', 'src', 'main', 'AndroidManifest.xml');
     if (fs.existsSync(manifestXml)) {
-      fs.writeFileSync(manifestXml, fs.readFileSync(manifestXml, 'utf8').replace(/(<manifest\\b[^>]*?)\\s+package="[^"]*"/, '$1'));
+      fs.writeFileSync(
+        manifestXml,
+        fs.readFileSync(manifestXml, 'utf8')
+          .replace(/(<manifest\\b[^>]*?)\\s+package="[^"]*"/, '$1')
+          .replace(/android:name="Application"/g, 'android:name=".Application"')
+          .replace(/android:name="LauncherActivity"/g, 'android:name=".LauncherActivity"')
+      );
     }
     const gradleProps = path.join(__dirname, 'gradle.properties');
     if (fs.existsSync(gradleProps)) {
       const p = fs.readFileSync(gradleProps, 'utf8');
       if (!p.includes('android.suppressUnsupportedCompileSdk=')) {
-        fs.writeFileSync(gradleProps, p.trimEnd() + '\\nandroid.suppressUnsupportedCompileSdk=36\\nandroid.r8.failOnMissingClasses=false\\n');
+        fs.writeFileSync(gradleProps, p.trimEnd() + '\\nandroid.suppressUnsupportedCompileSdk=36\\nandroid.r8.failOnMissingClasses=false\\nandroid.defaults.buildfeatures.resvalues=true\\n');
       }
     }
     const appGradle = path.join(__dirname, 'app', 'build.gradle');
     if (fs.existsSync(appGradle)) {
-      fs.writeFileSync(appGradle, fs.readFileSync(appGradle, 'utf8').replace(/minifyEnabled\\s+true/g, 'minifyEnabled false'));
+      let ag = fs.readFileSync(appGradle, 'utf8').replace(/minifyEnabled\\s+true/g, 'minifyEnabled false');
+      if (!ag.includes('buildFeatures')) {
+        ag = ag.replace(/namespace\\s+"[^"]+"/, (m) => m + '\\n    buildFeatures {\\n        resValues = true\\n    }');
+      }
+      fs.writeFileSync(appGradle, ag);
     }
     console.log('[2/2] Building signed .AAB (Play Console) and .APK...');
     await runCmd('npx', ['--yes', '@bubblewrap/cli', 'build', '--skipPwaValidation']);
