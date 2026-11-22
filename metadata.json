@@ -1,0 +1,6 @@
+{
+  "name": "HSP food",
+  "description": "Pakistan urban food delivery platform with real-time GPS order tracking, rider route optimization, Cash on Delivery & local wallet payments, restaurant menus, driver ratings, analytics dashboard, and live customer support.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

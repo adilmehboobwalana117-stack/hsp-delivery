@@ -1,0 +1,616 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core helper primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email in ['adilmehboobwalana117@gmail.com', 'adzivopk@gmail.com'] ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprints
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'city', 'language', 'role']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'email', 'phone', 'city', 'language', 'role', 'updatedAt']) &&
+        data.uid is string && data.uid == request.auth.uid && data.uid.size() <= 128 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 60 &&
+        data.language in ['en', 'ur'] &&
+        data.role in ['customer', 'restaurant', 'rider', 'staff'] &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 160)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 30));
+    }
+
+    function isValidTimeHHMM(val) {
+      return val is string && val.size() <= 10 && val.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+    }
+
+    function isValidRestaurant(data) {
+      return data.keys().hasAll(['name', 'cuisine', 'city', 'address', 'lat', 'lng', 'ownerId']) &&
+        data.keys().hasOnly([
+          'name', 'urduName', 'businessType', 'cuisine', 'city', 'address', 'lat', 'lng',
+          'coverImage', 'rating', 'reviewCount', 'deliveryTimeMin', 'deliveryFeePkr',
+          'minOrderPkr', 'isOpen',
+          'businessOpenTime', 'businessCloseTime', 'deliveryOpenTime', 'deliveryCloseTime',
+          'ownerId', 'ownerEmail', 'ownerPhone', 'businessLoginId',
+          'approvalStatus', 'createdAt', 'updatedAt'
+        ]) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+        (!('businessType' in data) || (data.businessType is string && data.businessType.size() >= 2 && data.businessType.size() <= 60)) &&
+        data.cuisine is string && data.cuisine.size() >= 2 && data.cuisine.size() <= 80 &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 60 &&
+        data.address is string && data.address.size() >= 3 && data.address.size() <= 240 &&
+        data.lat is number && data.lng is number &&
+        data.ownerId is string && data.ownerId.size() <= 128 &&
+        (!('urduName' in data) || (data.urduName is string && data.urduName.size() <= 120)) &&
+        (!('ownerEmail' in data) || (data.ownerEmail is string && data.ownerEmail.size() <= 160)) &&
+        (!('ownerPhone' in data) || (data.ownerPhone is string && data.ownerPhone.size() <= 30)) &&
+        (!('businessLoginId' in data) || (data.businessLoginId is string && data.businessLoginId.size() <= 32)) &&
+        (!('approvalStatus' in data) || data.approvalStatus in ['pending', 'approved', 'rejected']) &&
+        (!('coverImage' in data) || (data.coverImage is string && data.coverImage.size() <= 120000)) &&
+        (!('rating' in data) || (data.rating is number && data.rating >= 0 && data.rating <= 5)) &&
+        (!('reviewCount' in data) || (data.reviewCount is number && data.reviewCount >= 0)) &&
+        (!('deliveryTimeMin' in data) || (data.deliveryTimeMin is number && data.deliveryTimeMin >= 5 && data.deliveryTimeMin <= 180)) &&
+        (!('deliveryFeePkr' in data) || (data.deliveryFeePkr is number && data.deliveryFeePkr >= 0 && data.deliveryFeePkr <= 5000)) &&
+        (!('minOrderPkr' in data) || (data.minOrderPkr is number && data.minOrderPkr >= 0 && data.minOrderPkr <= 50000)) &&
+        (!('isOpen' in data) || data.isOpen is bool) &&
+        (!('businessOpenTime' in data) || isValidTimeHHMM(data.businessOpenTime)) &&
+        (!('businessCloseTime' in data) || isValidTimeHHMM(data.businessCloseTime)) &&
+        (!('deliveryOpenTime' in data) || isValidTimeHHMM(data.deliveryOpenTime)) &&
+        (!('deliveryCloseTime' in data) || isValidTimeHHMM(data.deliveryCloseTime));
+    }
+
+    function isValidMenuItem(data) {
+      return data.keys().hasAll(['restaurantId', 'name', 'pricePkr', 'category', 'available', 'ownerId']) &&
+        data.keys().hasOnly([
+          'restaurantId', 'name', 'description', 'pricePkr', 'varieties', 'category',
+          'imageUrl', 'available', 'ownerId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.restaurantId is string && isValidId(data.restaurantId) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+        data.pricePkr is number && data.pricePkr > 0 && data.pricePkr <= 100000 &&
+        (!('varieties' in data) || (
+          data.varieties is list &&
+          data.varieties.size() <= 4 &&
+          (
+            data.varieties.size() == 0 ||
+            (
+              data.varieties[0] is map &&
+              data.varieties[0].id is string &&
+              data.varieties[0].label is string &&
+              data.varieties[0].label.size() >= 1 &&
+              data.varieties[0].label.size() <= 60 &&
+              data.varieties[0].pricePkr is number &&
+              data.varieties[0].pricePkr > 0 &&
+              data.varieties[0].pricePkr <= 100000
+            )
+          )
+        )) &&
+        data.category is string && data.category.size() >= 2 && data.category.size() <= 60 &&
+        data.available is bool &&
+        data.ownerId is string && data.ownerId.size() <= 128 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 400)) &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 120000)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 40));
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['restaurantId', 'authorId', 'customerName', 'rating', 'comment', 'createdAt']) &&
+        data.keys().hasOnly(['restaurantId', 'authorId', 'customerName', 'rating', 'comment', 'createdAt']) &&
+        data.restaurantId is string && isValidId(data.restaurantId) &&
+        data.authorId is string && data.authorId == request.auth.uid &&
+        data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 100 &&
+        data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+        data.comment is string && data.comment.size() >= 2 && data.comment.size() <= 600 &&
+        data.createdAt is string && data.createdAt.size() <= 40;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll([
+          'orderCode', 'customerId', 'customerName', 'restaurantId', 'restaurantName',
+          'city', 'items', 'totalPkr', 'paymentMethod', 'status',
+          'deliveryAddress', 'deliveryLat', 'deliveryLng'
+        ]) &&
+        data.keys().hasOnly([
+          'orderCode', 'customerId', 'customerName', 'customerPhone',
+          'restaurantId', 'restaurantName', 'restaurantOwnerId', 'restaurantOwnerEmail',
+          'restaurantLat', 'restaurantLng',
+          'city', 'items', 'subtotalPkr', 'deliveryFeePkr', 'tipPkr', 'riderEarningPkr', 'totalPkr',
+          'paymentMethod', 'paymentStatus', 'paymentRef', 'status',
+          'awaitingRiderDispatch', 'acceptedByBusinessAt', 'rejectedByBusinessAt', 'rejectionReason',
+          'cancelledBy', 'cancelledAt', 'cancellationReason',
+          'riderAcceptedAt', 'pickedUpAt',
+          'deliveryAddress', 'deliveryNotes', 'deliveryLat', 'deliveryLng',
+          'riderId', 'riderName', 'riderPhone', 'riderEmail', 'riderLat', 'riderLng',
+          'etaMinutes', 'distanceKm', 'driverRating', 'driverReview', 'driverTags',
+          'officeSettled', 'officeSettledAt',
+          'orderSource', 'whatsappItemPhoto', 'whatsappItemNote', 'whatsappOrderLink',
+          'whatsappAmountAlreadyPaid', 'whatsappAmountAlreadyPaidAt',
+          'hasDeliveryProof', 'deliveryProofCapturedAt',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.orderCode is string && data.orderCode.size() >= 3 && data.orderCode.size() <= 32 &&
+        data.customerId is string && data.customerId.size() <= 128 &&
+        data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 100 &&
+        data.restaurantId is string && data.restaurantId.size() <= 128 &&
+        data.restaurantName is string && data.restaurantName.size() >= 1 && data.restaurantName.size() <= 120 &&
+        (!('restaurantOwnerId' in data) || (data.restaurantOwnerId is string && data.restaurantOwnerId.size() <= 128)) &&
+        (!('restaurantOwnerEmail' in data) || (data.restaurantOwnerEmail is string && data.restaurantOwnerEmail.size() <= 160)) &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 60 &&
+        data.items is list && data.items.size() >= 1 && data.items.size() <= 50 &&
+        data.totalPkr is number && data.totalPkr > 0 && data.totalPkr <= 500000 &&
+        data.paymentMethod in ['COD', 'JAZZCASH', 'EASYPAISA', 'CARD'] &&
+        data.status in ['placed', 'confirmed', 'preparing', 'picked_up', 'on_the_way', 'delivered', 'cancelled'] &&
+        (!('awaitingRiderDispatch' in data) || data.awaitingRiderDispatch is bool) &&
+        (!('acceptedByBusinessAt' in data) || (data.acceptedByBusinessAt is string && data.acceptedByBusinessAt.size() <= 40)) &&
+        (!('rejectedByBusinessAt' in data) || (data.rejectedByBusinessAt is string && data.rejectedByBusinessAt.size() <= 40)) &&
+        (!('rejectionReason' in data) || (data.rejectionReason is string && data.rejectionReason.size() >= 2 && data.rejectionReason.size() <= 300)) &&
+        (!('cancelledBy' in data) || data.cancelledBy in ['customer', 'business', 'admin']) &&
+        (!('cancelledAt' in data) || (data.cancelledAt is string && data.cancelledAt.size() <= 40)) &&
+        (!('cancellationReason' in data) || (data.cancellationReason is string && data.cancellationReason.size() >= 2 && data.cancellationReason.size() <= 300)) &&
+        (!('riderAcceptedAt' in data) || (data.riderAcceptedAt is string && data.riderAcceptedAt.size() <= 40)) &&
+        (!('pickedUpAt' in data) || (data.pickedUpAt is string && data.pickedUpAt.size() <= 40)) &&
+        data.deliveryAddress is string && data.deliveryAddress.size() >= 3 && data.deliveryAddress.size() <= 300 &&
+        data.deliveryLat is number && data.deliveryLng is number &&
+        (!('riderEmail' in data) || (data.riderEmail is string && data.riderEmail.size() <= 160)) &&
+        (!('tipPkr' in data) || (data.tipPkr is number && data.tipPkr >= 0 && data.tipPkr <= 50000)) &&
+        (!('riderEarningPkr' in data) || (data.riderEarningPkr is number && data.riderEarningPkr >= 0 && data.riderEarningPkr <= 50000)) &&
+        (!('customerPhone' in data) || (data.customerPhone is string && data.customerPhone.size() <= 30)) &&
+        (!('deliveryNotes' in data) || (data.deliveryNotes is string && data.deliveryNotes.size() <= 240)) &&
+        (!('paymentStatus' in data) || data.paymentStatus in ['pending_cod', 'paid', 'refunded']) &&
+        (!('paymentRef' in data) || (data.paymentRef is string && data.paymentRef.size() <= 80)) &&
+        (!('driverRating' in data) || (data.driverRating is number && data.driverRating >= 1 && data.driverRating <= 5)) &&
+        (!('driverReview' in data) || (data.driverReview is string && data.driverReview.size() <= 400)) &&
+        (!('driverTags' in data) || (data.driverTags is list && data.driverTags.size() <= 8)) &&
+        (!('officeSettled' in data) || data.officeSettled is bool) &&
+        (!('officeSettledAt' in data) || (data.officeSettledAt is string && data.officeSettledAt.size() <= 40)) &&
+        (!('orderSource' in data) || data.orderSource in ['app', 'whatsapp']) &&
+        (!('whatsappItemPhoto' in data) || (data.whatsappItemPhoto is string && data.whatsappItemPhoto.size() <= 120000)) &&
+        (!('whatsappItemNote' in data) || (data.whatsappItemNote is string && data.whatsappItemNote.size() <= 500)) &&
+        (!('whatsappOrderLink' in data) || (data.whatsappOrderLink is string && data.whatsappOrderLink.size() <= 500)) &&
+        (!('whatsappAmountAlreadyPaid' in data) || data.whatsappAmountAlreadyPaid is bool) &&
+        (!('whatsappAmountAlreadyPaidAt' in data) || (data.whatsappAmountAlreadyPaidAt is string && data.whatsappAmountAlreadyPaidAt.size() <= 40)) &&
+        (!('hasDeliveryProof' in data) || data.hasDeliveryProof is bool) &&
+        (!('deliveryProofCapturedAt' in data) || (data.deliveryProofCapturedAt is string && data.deliveryProofCapturedAt.size() <= 40));
+    }
+
+    function isValidDeliveryProof(data) {
+      return data.keys().hasAll(['orderId', 'orderCode', 'riderId', 'riderName', 'photoDataUrl', 'capturedAt']) &&
+        data.keys().hasOnly(['orderId', 'orderCode', 'riderId', 'riderName', 'photoDataUrl', 'capturedAt']) &&
+        data.orderId is string && isValidId(data.orderId) &&
+        data.orderCode is string && data.orderCode.size() >= 3 && data.orderCode.size() <= 32 &&
+        data.riderId is string && data.riderId.size() >= 1 && data.riderId.size() <= 128 &&
+        data.riderName is string && data.riderName.size() >= 1 && data.riderName.size() <= 100 &&
+        data.photoDataUrl is string && data.photoDataUrl.size() >= 20 && data.photoDataUrl.size() <= 120000 &&
+        data.capturedAt is string && data.capturedAt.size() <= 40;
+    }
+
+    function isValidSupportMessage(data) {
+      return data.keys().hasAll(['userId', 'senderName', 'senderRole', 'text', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'senderName', 'senderRole', 'orderCode', 'text', 'createdAt']) &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100 &&
+        data.senderRole in ['customer', 'support'] &&
+        data.text is string && data.text.size() >= 1 && data.text.size() <= 1000 &&
+        data.createdAt is string && data.createdAt.size() <= 40 &&
+        (!('orderCode' in data) || (data.orderCode is string && data.orderCode.size() <= 32));
+    }
+
+    function isValidRider(data) {
+      return data.keys().hasAll(['name', 'phone', 'city', 'vehicleType', 'vehiclePlate', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'name', 'email', 'phone', 'cnic', 'city', 'vehicleType', 'vehiclePlate',
+          'loginId', 'monthlySalaryPkr', 'walletBonusPkr',
+          'status', 'rating', 'completedDeliveries', 'createdAt'
+        ]) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 160)) &&
+        data.phone is string && data.phone.size() >= 7 && data.phone.size() <= 30 &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 60 &&
+        data.vehicleType in ['motorbike', 'car', 'bicycle'] &&
+        data.vehiclePlate is string && data.vehiclePlate.size() >= 2 && data.vehiclePlate.size() <= 30 &&
+        data.status in ['available', 'on_delivery', 'offline'] &&
+        data.createdAt is string && data.createdAt.size() <= 40 &&
+        (!('cnic' in data) || (data.cnic is string && data.cnic.size() <= 20)) &&
+        (!('loginId' in data) || (data.loginId is string && data.loginId.size() <= 32)) &&
+        (!('monthlySalaryPkr' in data) || (data.monthlySalaryPkr is number && data.monthlySalaryPkr >= 0 && data.monthlySalaryPkr <= 500000)) &&
+        (!('walletBonusPkr' in data) || (data.walletBonusPkr is number && data.walletBonusPkr >= -100000 && data.walletBonusPkr <= 200000)) &&
+        (!('rating' in data) || (data.rating is number && data.rating >= 0 && data.rating <= 5)) &&
+        (!('completedDeliveries' in data) || (data.completedDeliveries is number && data.completedDeliveries >= 0));
+    }
+
+    function isValidStaffMember(data) {
+      return data.keys().hasAll(['name', 'role', 'phone', 'city', 'loginId', 'monthlySalaryPkr', 'permissions', 'active', 'createdAt']) &&
+        data.keys().hasOnly(['name', 'role', 'email', 'phone', 'city', 'loginId', 'monthlySalaryPkr', 'permissions', 'active', 'createdAt']) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+        data.role in ['manager', 'staff'] &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 160)) &&
+        data.phone is string && data.phone.size() >= 7 && data.phone.size() <= 30 &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 60 &&
+        data.loginId is string && data.loginId.size() >= 3 && data.loginId.size() <= 32 &&
+        data.monthlySalaryPkr is number && data.monthlySalaryPkr >= 0 && data.monthlySalaryPkr <= 500000 &&
+        data.permissions is map &&
+        data.active is bool &&
+        data.createdAt is string && data.createdAt.size() <= 40;
+    }
+
+    function isValidSalaryRecord(data) {
+      return data.keys().hasAll(['targetType', 'targetId', 'targetName', 'monthKey', 'baseSalaryPkr', 'netAmountPkr', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'targetType', 'targetId', 'targetName', 'roleLabel', 'monthKey',
+          'baseSalaryPkr', 'bonusPkr', 'deductionPkr', 'netAmountPkr',
+          'status', 'paidAt', 'createdAt'
+        ]) &&
+        data.targetType in ['rider', 'staff'] &&
+        data.targetId is string && data.targetId.size() <= 128 &&
+        data.targetName is string && data.targetName.size() >= 1 && data.targetName.size() <= 100 &&
+        data.monthKey is string && data.monthKey.size() <= 24 &&
+        data.baseSalaryPkr is number && data.baseSalaryPkr >= 0 && data.baseSalaryPkr <= 500000 &&
+        data.netAmountPkr is number && data.netAmountPkr >= 0 && data.netAmountPkr <= 1000000 &&
+        data.status in ['pending', 'paid'] &&
+        data.createdAt is string && data.createdAt.size() <= 40;
+    }
+
+    function isValidAccessPass(data) {
+      return data.keys().hasAll(['passId', 'roleType', 'targetId', 'label', 'active']) &&
+        data.keys().hasOnly(['passId', 'roleType', 'targetId', 'label', 'emailHash', 'active', 'permissions']) &&
+        data.passId is string && data.passId.size() >= 3 && data.passId.size() <= 32 &&
+        data.roleType in ['rider', 'business', 'staff'] &&
+        data.targetId is string && data.targetId.size() <= 128 &&
+        data.label is string && data.label.size() <= 120 &&
+        (!('emailHash' in data) || (data.emailHash is string && data.emailHash.size() <= 64)) &&
+        data.active is bool;
+    }
+
+    function isValidAppSettings(data) {
+      return data.keys().hasAll(['whatsappNumber']) &&
+        data.keys().hasOnly([
+          'whatsappNumber',
+          'welcomeTitle',
+          'welcomeSubtitle',
+          'deletedBusinessIds',
+          'businessCategories',
+          'customerBaseKm',
+          'customerBaseFeePkr',
+          'customerExtraPerKmPkr',
+          'riderBaseKm',
+          'riderBasePayPkr',
+          'riderExtraPerKmPkr',
+          'customerFreeCancelBeforeAccept',
+          'customerLateCancelFeePkr',
+          'customerRefundWindowHours',
+          'customerPolicyRules',
+          'businessResponseSlaMinutes',
+          'businessMaxMonthlyCancellations',
+          'businessCancelPenaltyPkr',
+          'businessPolicyRules',
+          'playAndroidPackageName',
+          'playSha256Fingerprint',
+          'playDeveloperName',
+          'playSupportEmail',
+          'playProductionUrl',
+          'updatedAt'
+        ]) &&
+        data.whatsappNumber is string && data.whatsappNumber.size() >= 7 && data.whatsappNumber.size() <= 30 &&
+        (!('welcomeTitle' in data) || (data.welcomeTitle is string && data.welcomeTitle.size() <= 120)) &&
+        (!('welcomeSubtitle' in data) || (data.welcomeSubtitle is string && data.welcomeSubtitle.size() <= 240)) &&
+        (!('deletedBusinessIds' in data) || (
+          data.deletedBusinessIds is list &&
+          data.deletedBusinessIds.size() <= 200 &&
+          (data.deletedBusinessIds.size() == 0 || isValidId(data.deletedBusinessIds[0]))
+        )) &&
+        (!('businessCategories' in data) || (
+          data.businessCategories is list &&
+          data.businessCategories.size() >= 1 &&
+          data.businessCategories.size() <= 40 &&
+          data.businessCategories[0] is string &&
+          data.businessCategories[0].size() >= 2 &&
+          data.businessCategories[0].size() <= 60
+        )) &&
+        (!('customerBaseKm' in data) || (data.customerBaseKm is number && data.customerBaseKm >= 0.5 && data.customerBaseKm <= 50)) &&
+        (!('customerBaseFeePkr' in data) || (data.customerBaseFeePkr is number && data.customerBaseFeePkr >= 0 && data.customerBaseFeePkr <= 50000)) &&
+        (!('customerExtraPerKmPkr' in data) || (data.customerExtraPerKmPkr is number && data.customerExtraPerKmPkr >= 0 && data.customerExtraPerKmPkr <= 10000)) &&
+        (!('riderBaseKm' in data) || (data.riderBaseKm is number && data.riderBaseKm >= 0.5 && data.riderBaseKm <= 50)) &&
+        (!('riderBasePayPkr' in data) || (data.riderBasePayPkr is number && data.riderBasePayPkr >= 0 && data.riderBasePayPkr <= 50000)) &&
+        (!('riderExtraPerKmPkr' in data) || (data.riderExtraPerKmPkr is number && data.riderExtraPerKmPkr >= 0 && data.riderExtraPerKmPkr <= 10000)) &&
+        (!('customerFreeCancelBeforeAccept' in data) || data.customerFreeCancelBeforeAccept is bool) &&
+        (!('customerLateCancelFeePkr' in data) || (data.customerLateCancelFeePkr is number && data.customerLateCancelFeePkr >= 0 && data.customerLateCancelFeePkr <= 5000)) &&
+        (!('customerRefundWindowHours' in data) || (data.customerRefundWindowHours is number && data.customerRefundWindowHours >= 1 && data.customerRefundWindowHours <= 168)) &&
+        (!('customerPolicyRules' in data) || (data.customerPolicyRules is string && data.customerPolicyRules.size() <= 4000)) &&
+        (!('businessResponseSlaMinutes' in data) || (data.businessResponseSlaMinutes is number && data.businessResponseSlaMinutes >= 1 && data.businessResponseSlaMinutes <= 60)) &&
+        (!('businessMaxMonthlyCancellations' in data) || (data.businessMaxMonthlyCancellations is number && data.businessMaxMonthlyCancellations >= 1 && data.businessMaxMonthlyCancellations <= 50)) &&
+        (!('businessCancelPenaltyPkr' in data) || (data.businessCancelPenaltyPkr is number && data.businessCancelPenaltyPkr >= 0 && data.businessCancelPenaltyPkr <= 10000)) &&
+        (!('businessPolicyRules' in data) || (data.businessPolicyRules is string && data.businessPolicyRules.size() <= 4000)) &&
+        (!('playAndroidPackageName' in data) || (data.playAndroidPackageName is string && data.playAndroidPackageName.size() <= 120)) &&
+        (!('playSha256Fingerprint' in data) || (data.playSha256Fingerprint is string && data.playSha256Fingerprint.size() <= 120)) &&
+        (!('playDeveloperName' in data) || (data.playDeveloperName is string && data.playDeveloperName.size() <= 100)) &&
+        (!('playSupportEmail' in data) || (data.playSupportEmail is string && data.playSupportEmail.size() <= 160)) &&
+        (!('playProductionUrl' in data) || (data.playProductionUrl is string && data.playProductionUrl.size() <= 300)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 40));
+    }
+
+    function isValidBusinessPayout(data) {
+      return data.keys().hasAll(['restaurantId', 'restaurantName', 'city', 'monthKey', 'grossSubtotalPkr', 'commissionPkr', 'netPayablePkr', 'payoutMethod', 'status', 'updatedAt', 'createdAt']) &&
+        data.keys().hasOnly([
+          'restaurantId', 'restaurantName', 'ownerId', 'ownerEmail', 'city', 'businessLoginId', 'monthKey',
+          'grossSubtotalPkr', 'commissionPkr', 'netPayablePkr', 'payoutMethod', 'paymentRef',
+          'status', 'paidAt', 'updatedAt', 'createdAt'
+        ]) &&
+        data.restaurantId is string && isValidId(data.restaurantId) &&
+        data.restaurantName is string && data.restaurantName.size() >= 1 && data.restaurantName.size() <= 120 &&
+        (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() <= 128)) &&
+        (!('ownerEmail' in data) || (data.ownerEmail is string && data.ownerEmail.size() <= 150)) &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 60 &&
+        (!('businessLoginId' in data) || (data.businessLoginId is string && data.businessLoginId.size() <= 32)) &&
+        data.monthKey is string && data.monthKey.size() <= 24 &&
+        data.grossSubtotalPkr is number && data.grossSubtotalPkr >= 0 && data.grossSubtotalPkr <= 10000000 &&
+        data.commissionPkr is number && data.commissionPkr >= 0 && data.commissionPkr <= 5000000 &&
+        data.netPayablePkr is number && data.netPayablePkr >= 0 && data.netPayablePkr <= 10000000 &&
+        data.payoutMethod in ['BANK', 'JAZZCASH', 'EASYPAISA', 'CASH'] &&
+        (!('paymentRef' in data) || (data.paymentRef is string && data.paymentRef.size() <= 80)) &&
+        data.status in ['pending', 'paid'] &&
+        (!('paidAt' in data) || (data.paidAt is string && data.paidAt.size() <= 40)) &&
+        data.updatedAt is string && data.updatedAt.size() <= 40 &&
+        data.createdAt is string && data.createdAt.size() <= 40;
+    }
+
+    // 1. Users (PII isolated to owner or admin)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isValidId(userId) && isVerified() && request.auth.uid == userId && isValidUserProfile(incoming());
+      allow update: if isValidId(userId) && isVerified() && request.auth.uid == userId && isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid;
+      allow delete: if isAdmin();
+    }
+
+    // 2. Restaurants / Businesses (Public directory; non-admins create as 'pending' until App Owner approves)
+    match /restaurants/{restaurantId} {
+      allow get: if isValidId(restaurantId);
+      allow list: if true;
+      allow create: if isValidId(restaurantId) && isVerified() &&
+        isValidRestaurant(incoming()) && incoming().ownerId == request.auth.uid && (
+          isAdmin() ||
+          ('approvalStatus' in incoming() && incoming().approvalStatus == 'pending')
+        );
+      allow update: if isValidId(restaurantId) && isVerified() && isValidRestaurant(incoming()) && (
+        isAdmin() ||
+        (
+          (
+            existing().ownerId == request.auth.uid ||
+            ('ownerEmail' in existing() && existing().ownerEmail == request.auth.token.email)
+          ) &&
+          incoming().ownerId == existing().ownerId &&
+          !incoming().diff(existing()).affectedKeys().hasAny(['approvalStatus', 'businessLoginId', 'ownerEmail'])
+        ) ||
+        incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'reviewCount', 'updatedAt'])
+      );
+      allow delete: if isValidId(restaurantId) && (isAdmin() || (isVerified() && existing().ownerId == request.auth.uid));
+
+      // 2a. Menu Items subcollection
+      match /menuItems/{itemId} {
+        allow get: if isValidId(restaurantId) && isValidId(itemId);
+        allow list: if isValidId(restaurantId);
+        allow create: if isValidId(restaurantId) && isValidId(itemId) && isVerified() &&
+          isValidMenuItem(incoming()) && (isAdmin() || incoming().ownerId == request.auth.uid);
+        allow update: if isValidId(restaurantId) && isValidId(itemId) && isVerified() &&
+          isValidMenuItem(incoming()) && incoming().restaurantId == existing().restaurantId &&
+          (isAdmin() || existing().ownerId == request.auth.uid);
+        allow delete: if isValidId(restaurantId) && isValidId(itemId) &&
+          (isAdmin() || (isVerified() && existing().ownerId == request.auth.uid));
+      }
+
+      // 2b. Restaurant Reviews subcollection
+      match /reviews/{reviewId} {
+        allow get: if isValidId(restaurantId) && isValidId(reviewId);
+        allow list: if isValidId(restaurantId);
+        allow create: if isValidId(restaurantId) && isValidId(reviewId) && isVerified() &&
+          isValidReview(incoming()) && incoming().authorId == request.auth.uid;
+        allow update, delete: if isValidId(restaurantId) && isValidId(reviewId) &&
+          (isAdmin() || (isVerified() && existing().authorId == request.auth.uid));
+      }
+    }
+
+    // 3. Orders (Customer, Store Owner, Available/Assigned Rider, or Admin)
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (
+        isAdmin() ||
+        existing().customerId == request.auth.uid ||
+        existing().riderId == request.auth.uid ||
+        (isVerified() && 'riderEmail' in existing() && existing().riderEmail == request.auth.token.email) ||
+        ('restaurantOwnerId' in existing() && existing().restaurantOwnerId == request.auth.uid) ||
+        (isVerified() && 'restaurantOwnerEmail' in existing() && existing().restaurantOwnerEmail == request.auth.token.email) ||
+        (isVerified() && 'awaitingRiderDispatch' in existing() && existing().awaitingRiderDispatch == true && existing().status in ['confirmed', 'preparing'])
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.customerId == request.auth.uid ||
+        resource.data.riderId == request.auth.uid ||
+        (isVerified() && 'riderEmail' in resource.data && resource.data.riderEmail == request.auth.token.email) ||
+        ('restaurantOwnerId' in resource.data && resource.data.restaurantOwnerId == request.auth.uid) ||
+        (isVerified() && 'restaurantOwnerEmail' in resource.data && resource.data.restaurantOwnerEmail == request.auth.token.email) ||
+        (isVerified() && 'awaitingRiderDispatch' in resource.data && resource.data.awaitingRiderDispatch == true && resource.data.status in ['confirmed', 'preparing'])
+      );
+      allow create: if isValidId(orderId) && isVerified() &&
+        isValidOrder(incoming()) && incoming().customerId == request.auth.uid;
+      allow update: if isValidId(orderId) && isVerified() && isValidOrder(incoming()) &&
+        incoming().customerId == existing().customerId && (
+          isAdmin() ||
+          (existing().customerId == request.auth.uid && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['driverRating', 'driverReview', 'driverTags', 'updatedAt']) ||
+            (
+              existing().status == 'placed' &&
+              incoming().status == 'cancelled' &&
+              (!('cancelledBy' in incoming()) || incoming().cancelledBy == 'customer') &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt', 'cancellationReason', 'updatedAt'])
+            ) ||
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'awaitingRiderDispatch', 'acceptedByBusinessAt', 'rejectedByBusinessAt', 'rejectionReason',
+              'cancelledBy', 'cancelledAt', 'cancellationReason',
+              'riderId', 'riderName', 'riderPhone', 'riderEmail', 'riderAcceptedAt', 'pickedUpAt',
+              'riderLat', 'riderLng', 'etaMinutes', 'distanceKm', 'paymentStatus', 'officeSettled', 'officeSettledAt',
+              'whatsappAmountAlreadyPaid', 'whatsappAmountAlreadyPaidAt', 'updatedAt'
+            ])
+          )) ||
+          (
+            (
+              ('restaurantOwnerId' in existing() && existing().restaurantOwnerId == request.auth.uid) ||
+              ('restaurantOwnerEmail' in existing() && existing().restaurantOwnerEmail == request.auth.token.email)
+            ) &&
+            (incoming().status != 'cancelled' || existing().status in ['placed', 'confirmed', 'preparing']) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'awaitingRiderDispatch', 'acceptedByBusinessAt', 'rejectedByBusinessAt', 'rejectionReason',
+              'cancelledBy', 'cancelledAt', 'cancellationReason', 'pickedUpAt', 'updatedAt'
+            ])
+          ) ||
+          (
+            'awaitingRiderDispatch' in existing() && existing().awaitingRiderDispatch == true &&
+            existing().status in ['confirmed', 'preparing'] &&
+            incoming().awaitingRiderDispatch == false &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'riderId', 'riderName', 'riderPhone', 'riderEmail', 'riderAcceptedAt', 'awaitingRiderDispatch', 'updatedAt'
+            ])
+          ) ||
+          (
+            (
+              existing().riderId == request.auth.uid ||
+              ('riderEmail' in existing() && existing().riderEmail == request.auth.token.email)
+            ) &&
+            existing().status != 'cancelled' &&
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'pickedUpAt', 'riderLat', 'riderLng', 'etaMinutes', 'distanceKm',
+                'paymentStatus', 'officeSettled', 'officeSettledAt',
+                'hasDeliveryProof', 'deliveryProofCapturedAt', 'updatedAt'
+              ]) ||
+              (
+                'orderSource' in existing() && existing().orderSource == 'whatsapp' &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'whatsappAmountAlreadyPaid', 'whatsappAmountAlreadyPaidAt', 'paymentStatus', 'officeSettled', 'officeSettledAt', 'updatedAt'
+                ])
+              )
+            )
+          )
+        );
+      allow delete: if isAdmin();
+
+      // 3a. Admin-Only Delivery Photo Proof Subcollection (Master Gate via parent order)
+      match /deliveryProof/{proofId} {
+        allow get, list: if isValidId(orderId) && isAdmin();
+        allow create, update: if isValidId(orderId) && proofId == 'proof' && isVerified() &&
+          isValidDeliveryProof(incoming()) &&
+          incoming().orderId == orderId && (
+            isAdmin() ||
+            (
+              exists(/databases/$(database)/documents/orders/$(orderId)) && (
+                get(/databases/$(database)/documents/orders/$(orderId)).data.riderId == request.auth.uid ||
+                (
+                  'riderEmail' in get(/databases/$(database)/documents/orders/$(orderId)).data &&
+                  get(/databases/$(database)/documents/orders/$(orderId)).data.riderEmail == request.auth.token.email
+                )
+              )
+            )
+          );
+        allow delete: if isValidId(orderId) && isAdmin();
+      }
+    }
+
+    // 4. Support Messages
+    match /supportMessages/{messageId} {
+      allow get: if isValidId(messageId) && isSignedIn() && (isAdmin() || existing().userId == request.auth.uid);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isValidId(messageId) && isVerified() && isValidSupportMessage(incoming()) && (
+        isAdmin() ||
+        incoming().userId == request.auth.uid
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 5. Riders Fleet Roster (PII isolated strictly to App Owners)
+    match /riders/{riderId} {
+      allow get: if isValidId(riderId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(riderId) && isAdmin() && isValidRider(incoming());
+      allow update: if isValidId(riderId) && isAdmin() && isValidRider(incoming()) &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isValidId(riderId) && isAdmin();
+    }
+
+    // 6. Staff & Managers (PII isolated strictly to App Owners)
+    match /staffMembers/{staffId} {
+      allow get: if isValidId(staffId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(staffId) && isAdmin() && isValidStaffMember(incoming());
+      allow update: if isValidId(staffId) && isAdmin() && isValidStaffMember(incoming()) &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isValidId(staffId) && isAdmin();
+    }
+
+    // 7. Salary Payroll Records (PII isolated strictly to App Owners)
+    match /salaryRecords/{salaryId} {
+      allow get: if isValidId(salaryId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(salaryId) && isAdmin() && isValidSalaryRecord(incoming());
+      allow update: if isValidId(salaryId) && isAdmin() && isValidSalaryRecord(incoming()) &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isValidId(salaryId) && isAdmin();
+    }
+
+    // 8. Access Passes (Non-PII exact-ID Login ID + SHA-256 emailHash verification; no public listing)
+    match /accessPasses/{passId} {
+      allow get: if isValidId(passId);
+      allow list: if isAdmin();
+      allow create, update: if isValidId(passId) && isAdmin() && isValidAccessPass(incoming());
+      allow delete: if isValidId(passId) && isAdmin();
+    }
+
+    // 9. Public App Settings (WhatsApp Support Number & Welcome Banner copy; Admin writable only)
+    match /appSettings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if false;
+      allow create, update: if isValidId(settingId) && isAdmin() && isValidAppSettings(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 10. Business Owner Payout Settlements (Admin manages; matching store owner can read their own payouts)
+    match /businessPayouts/{payoutId} {
+      allow get: if isValidId(payoutId) && (
+        isAdmin() ||
+        (isSignedIn() && 'ownerId' in resource.data && resource.data.ownerId == request.auth.uid) ||
+        (isVerified() && 'ownerEmail' in resource.data && resource.data.ownerEmail == request.auth.token.email)
+      );
+      allow list: if isAdmin() ||
+        (isSignedIn() && 'ownerId' in resource.data && resource.data.ownerId == request.auth.uid) ||
+        (isVerified() && 'ownerEmail' in resource.data && resource.data.ownerEmail == request.auth.token.email);
+      allow create: if isValidId(payoutId) && isAdmin() && isValidBusinessPayout(incoming());
+      allow update: if isValidId(payoutId) && isAdmin() && isValidBusinessPayout(incoming()) &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isValidId(payoutId) && isAdmin();
+    }
+  }
+}

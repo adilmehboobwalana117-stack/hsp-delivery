@@ -1,0 +1,222 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Poppins', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    --font-urdu: 'Noto Nastaliq Urdu', 'Inter', sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    background-color: #07070a;
+    color: #f8fafc;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .font-mono-tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-urdu {
+    font-family: var(--font-urdu);
+    font-weight: 700;
+    line-height: 2;
+  }
+
+  /* Smooth, Tactile Compositor-Only Button Animations Across the Entire App */
+  button:not(:disabled),
+  a.btn-tactile {
+    cursor: pointer;
+    transition:
+      transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      filter 160ms ease,
+      opacity 160ms ease;
+    will-change: transform;
+  }
+
+  button:not(:disabled):active,
+  a.btn-tactile:active {
+    transform: scale(0.965);
+  }
+
+  @media (hover: hover) {
+    button:not(:disabled):hover,
+    a.btn-tactile:hover {
+      transform: translateY(-1px);
+    }
+
+    button:not(:disabled):active,
+    a.btn-tactile:active {
+      transform: scale(0.965) translateY(0);
+    }
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid #facc15;
+    outline-offset: 2px;
+  }
+}
+
+/* Subtle Shimmer Sweep for Flagship Primary CTAs */
+@keyframes hspButtonShimmer {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(220%) skewX(-18deg);
+  }
+}
+
+@keyframes hspCallGlow {
+  0%, 100% {
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.28);
+  }
+  50% {
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.48);
+  }
+}
+
+@keyframes hspViewFadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.28) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: translateX(-120%) skewX(-18deg);
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .btn-shimmer:hover::after {
+    animation: hspButtonShimmer 680ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+.btn-call-pulse {
+  animation: hspCallGlow 2.4s ease-in-out infinite;
+}
+
+.view-enter {
+  animation: hspViewFadeSlide 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Respect Reduced Motion Accessibility Preference */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  button:not(:disabled),
+  a.btn-tactile,
+  .btn-shimmer::after,
+  .btn-call-pulse,
+  .view-enter {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Gold Scrollbars on Pure Black */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #07070a;
+}
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #f59e0b;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Clean Print Mode for Receipts, Rider Statements, Business Slips & QR Posters */
+.print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .no-print,
+  header,
+  nav {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-card {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+}

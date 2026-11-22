@@ -1,0 +1,65 @@
+{
+  "packageId": "com.hspdelivery.app",
+  "host": "ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app",
+  "name": "HSP delivery — Hasilpur & Pakistan Delivery",
+  "launcherName": "HSP delivery",
+  "display": "standalone",
+  "themeColor": "#07070A",
+  "themeColorDark": "#07070A",
+  "navigationColor": "#07070A",
+  "navigationColorDark": "#07070A",
+  "navigationDividerColor": "#F59E0B",
+  "navigationDividerColorDark": "#F59E0B",
+  "backgroundColor": "#07070A",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/pwa-512x512.png",
+  "maskableIconUrl": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/pwa-maskable-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./hsp-delivery-release.keystore",
+    "alias": "hspdelivery"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "Order Food & Shops",
+      "shortName": "Order Now",
+      "url": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/?tab=order",
+      "chosenIconUrl": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/pwa-192x192.png"
+    },
+    {
+      "name": "Track Live Delivery",
+      "shortName": "Track Order",
+      "url": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/?tab=track",
+      "chosenIconUrl": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/pwa-192x192.png"
+    },
+    {
+      "name": "Rider Dispatch",
+      "shortName": "Rider",
+      "url": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/?tab=rider",
+      "chosenIconUrl": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/pwa-192x192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    },
+    "playBilling": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/",
+  "minSdkVersion": 23,
+  "orientation": "portrait"
+}

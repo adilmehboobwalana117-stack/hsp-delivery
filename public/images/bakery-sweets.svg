@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" fill="none">
+  <defs>
+    <linearGradient id="bkbg" x1="0" y1="0" x2="800" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B0764"/>
+      <stop offset="50%" stop-color="#9F1239"/>
+      <stop offset="100%" stop-color="#78350F"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#bkbg)"/>
+  <circle cx="620" cy="140" r="140" fill="#F59E0B" fill-opacity="0.18"/>
+  <circle cx="190" cy="470" r="150" fill="#FB7185" fill-opacity="0.16"/>
+  <!-- Cake Pedestal -->
+  <rect x="210" y="425" width="380" height="26" rx="13" fill="#FDE68A"/>
+  <rect x="372" y="451" width="56" height="54" rx="8" fill="#F59E0B"/>
+  <rect x="320" y="495" width="160" height="20" rx="10" fill="#FCD34D"/>
+  <!-- Two-Tier Celebration Cake -->
+  <rect x="240" y="305" width="320" height="120" rx="22" fill="#451A03"/>
+  <path d="M240 328C268 350 296 350 320 328C346 350 374 350 400 328C426 350 454 350 480 328C506 350 534 350 560 328V305C560 293 550 284 538 284H262C250 284 240 293 240 305V328Z" fill="#FFF1F2"/>
+  <rect x="295" y="195" width="210" height="90" rx="18" fill="#78350F"/>
+  <path d="M295 215C320 236 344 236 365 215C388 236 412 236 435 215C458 236 482 236 505 215V195C505 184 496 176 485 176H315C304 176 295 184 295 195V215Z" fill="#FECDD3"/>
+  <!-- Cherries / Mithai Pearls -->
+  <circle cx="345" cy="162" r="18" fill="#E11D48"/>
+  <circle cx="400" cy="154" r="22" fill="#F43F5E"/>
+  <circle cx="455" cy="162" r="18" fill="#E11D48"/>
+  <circle cx="290" cy="382" r="14" fill="#FBBF24"/>
+  <circle cx="360" cy="382" r="14" fill="#FBBF24"/>
+  <circle cx="430" cy="382" r="14" fill="#FBBF24"/>
+  <circle cx="500" cy="382" r="14" fill="#FBBF24"/>
+</svg>

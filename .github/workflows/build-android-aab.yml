@@ -1,0 +1,144 @@
+name: Build HSP delivery Android AAB & APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: 'Public HTTPS URL of HSP delivery (must serve /manifest.webmanifest)'
+        required: true
+        default: 'https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app'
+      package_id:
+        description: 'Android Package Name (Application ID)'
+        required: true
+        default: 'com.hspdelivery.app'
+      version_code:
+        description: 'Android Version Code (increment for every Play Console upload)'
+        required: true
+        default: '1'
+      version_name:
+        description: 'Android Version Name'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build-android-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java 17 (JDK)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Prepare Release Keystore (Secrets or New Upload Key)
+        id: keystore
+        working-directory: android-twa
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > hsp-delivery-release.keystore
+            echo "store_pass=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+            echo "key_pass=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" >> "$GITHUB_OUTPUT"
+          else
+            PASS="HspDelivery2026!"
+            keytool -genkeypair -v \
+              -keystore hsp-delivery-release.keystore \
+              -alias hspdelivery \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$PASS" -keypass "$PASS" \
+              -dname "CN=HSP delivery, OU=Operations, O=HSP delivery, L=Hasilpur, S=Punjab, C=PK"
+            echo "store_pass=$PASS" >> "$GITHUB_OUTPUT"
+            echo "key_pass=$PASS" >> "$GITHUB_OUTPUT"
+          fi
+          SHA256=$(keytool -list -v -keystore hsp-delivery-release.keystore -alias hspdelivery -storepass "${KEYSTORE_PASSWORD:-HspDelivery2026!}" | grep "SHA256:" | head -n 1 | awk '{print $2}')
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "Upload Key SHA-256: $SHA256"
+
+      - name: Update twa-manifest.json with Workflow Inputs
+        working-directory: android-twa
+        env:
+          INPUT_URL: ${{ github.event.inputs.app_url }}
+          INPUT_PKG: ${{ github.event.inputs.package_id }}
+          INPUT_VCODE: ${{ github.event.inputs.version_code }}
+          INPUT_VNAME: ${{ github.event.inputs.version_name }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const cleanUrl = process.env.INPUT_URL.replace(/\/+$/, "");
+            const host = new URL(cleanUrl).host;
+            const m = JSON.parse(fs.readFileSync("twa-manifest.json", "utf8"));
+            m.packageId = process.env.INPUT_PKG;
+            m.host = host;
+            m.iconUrl = cleanUrl + "/pwa-512x512.png";
+            m.maskableIconUrl = cleanUrl + "/pwa-maskable-512x512.png";
+            m.webManifestUrl = cleanUrl + "/manifest.webmanifest";
+            m.fullScopeUrl = cleanUrl + "/";
+            m.appVersionCode = Number(process.env.INPUT_VCODE) || 1;
+            m.appVersionName = process.env.INPUT_VNAME || "1.0.0";
+            m.shortcuts = (m.shortcuts || []).map((s) => ({
+              ...s,
+              url: cleanUrl + new URL(s.url).pathname + new URL(s.url).search,
+              chosenIconUrl: cleanUrl + "/pwa-192x192.png",
+            }));
+            fs.writeFileSync("twa-manifest.json", JSON.stringify(m, null, 2));
+          '
+
+      - name: Configure Bubblewrap JDK & Android SDK Paths
+        run: |
+          mkdir -p ~/.bubblewrap
+          cat <<EOF > ~/.bubblewrap/config.json
+          {
+            "jdkPath": "$JAVA_HOME",
+            "androidSdkPath": "$ANDROID_HOME"
+          }
+          EOF
+
+      - name: Build Signed Android App Bundle (.aab) & APK (.apk)
+        working-directory: android-twa
+        env:
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ steps.keystore.outputs.store_pass }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ steps.keystore.outputs.key_pass }}
+        run: |
+          npx --yes @bubblewrap/cli update --skipVersionUpgrade
+          npx --yes @bubblewrap/cli build --skipPwaValidation
+
+      - name: Generate Matching assetlinks.json
+        working-directory: android-twa
+        env:
+          INPUT_PKG: ${{ github.event.inputs.package_id }}
+          SHA256: ${{ steps.keystore.outputs.sha256 }}
+        run: |
+          cat <<EOF > assetlinks.json
+          [
+            {
+              "relation": ["delegate_permission/common.handle_all_urls"],
+              "target": {
+                "namespace": "android_app",
+                "package_name": "$INPUT_PKG",
+                "sha256_cert_fingerprints": ["$SHA256"]
+              }
+            }
+          ]
+          EOF
+
+      - name: Upload Play Console .AAB, Test .APK & assetlinks.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: hsp-delivery-android-release
+          path: |
+            android-twa/app-release-bundle.aab
+            android-twa/app-release-signed.apk
+            android-twa/assetlinks.json
+            android-twa/hsp-delivery-release.keystore
+          retention-days: 30

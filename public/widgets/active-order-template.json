@@ -1,0 +1,50 @@
+{
+  "type": "AdaptiveCard",
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "${title}",
+      "weight": "Bolder",
+      "size": "Medium",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "${subtitle}",
+      "isSubtle": true,
+      "spacing": "Small",
+      "wrap": true
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        {
+          "title": "Service Area",
+          "value": "${city}"
+        },
+        {
+          "title": "Base Delivery",
+          "value": "${baseFee}"
+        },
+        {
+          "title": "Status",
+          "value": "${status}"
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Track Live Order",
+      "url": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/?tab=track"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "Order Now",
+      "url": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/?tab=order"
+    }
+  ]
+}

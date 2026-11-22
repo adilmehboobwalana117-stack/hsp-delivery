@@ -1,0 +1,379 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile and preferred city/language settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "city": { "type": "string", "maxLength": 60 },
+        "language": { "type": "string", "enum": ["en", "ur"] },
+        "role": { "type": "string", "enum": ["customer", "restaurant", "rider", "staff", "admin"] }
+      },
+      "required": ["uid", "displayName", "city", "language", "role"]
+    },
+    "Restaurant": {
+      "title": "Restaurant",
+      "description": "Local Pakistani business, store, or restaurant listed on HSP delivery",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 120 },
+        "urduName": { "type": "string", "maxLength": 120 },
+        "businessType": { "type": "string", "maxLength": 60 },
+        "cuisine": { "type": "string", "maxLength": 80 },
+        "city": { "type": "string", "maxLength": 60 },
+        "address": { "type": "string", "maxLength": 240 },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "coverImage": { "type": "string", "maxLength": 120000 },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "deliveryTimeMin": { "type": "number" },
+        "deliveryFeePkr": { "type": "number" },
+        "minOrderPkr": { "type": "number" },
+        "isOpen": { "type": "boolean" },
+        "businessOpenTime": { "type": "string", "maxLength": 10, "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+        "businessCloseTime": { "type": "string", "maxLength": 10, "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+        "deliveryOpenTime": { "type": "string", "maxLength": 10, "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+        "deliveryCloseTime": { "type": "string", "maxLength": 10, "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "ownerEmail": { "type": "string", "format": "email", "maxLength": 160 },
+        "ownerPhone": { "type": "string", "maxLength": 30 },
+        "businessLoginId": { "type": "string", "maxLength": 32 },
+        "approvalStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] }
+      },
+      "required": ["name", "cuisine", "city", "address", "lat", "lng", "ownerId"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "Dish or product available in a business store",
+      "type": "object",
+      "properties": {
+        "restaurantId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 400 },
+        "pricePkr": { "type": "number" },
+        "varieties": {
+          "type": "array",
+          "description": "Up to 4 manual product variety options with individual PKR prices"
+        },
+        "category": { "type": "string", "maxLength": 60 },
+        "imageUrl": { "type": "string", "maxLength": 120000 },
+        "available": { "type": "boolean" },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["restaurantId", "name", "pricePkr", "category", "available", "ownerId"]
+    },
+    "RestaurantReview": {
+      "title": "RestaurantReview",
+      "description": "Customer review and star rating for a store",
+      "type": "object",
+      "properties": {
+        "restaurantId": { "type": "string", "maxLength": 128 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "rating": { "type": "number" },
+        "comment": { "type": "string", "maxLength": 600 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["restaurantId", "authorId", "customerName", "rating", "comment"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Delivery order with GPS distance pricing, rider tip, rider wallet payout, and ratings",
+      "type": "object",
+      "properties": {
+        "orderCode": { "type": "string", "maxLength": 32 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "restaurantId": { "type": "string", "maxLength": 128 },
+        "restaurantName": { "type": "string", "maxLength": 120 },
+        "restaurantOwnerId": { "type": "string", "maxLength": 128 },
+        "restaurantOwnerEmail": { "type": "string", "format": "email", "maxLength": 160 },
+        "restaurantLat": { "type": "number" },
+        "restaurantLng": { "type": "number" },
+        "city": { "type": "string", "maxLength": 60 },
+        "items": { "type": "array" },
+        "subtotalPkr": { "type": "number" },
+        "deliveryFeePkr": { "type": "number" },
+        "tipPkr": { "type": "number" },
+        "riderEarningPkr": { "type": "number" },
+        "totalPkr": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["COD", "JAZZCASH", "EASYPAISA", "CARD"] },
+        "paymentStatus": { "type": "string", "enum": ["pending_cod", "paid", "refunded"] },
+        "paymentRef": { "type": "string", "maxLength": 80 },
+        "status": {
+          "type": "string",
+          "enum": ["placed", "confirmed", "preparing", "picked_up", "on_the_way", "delivered", "cancelled"]
+        },
+        "awaitingRiderDispatch": { "type": "boolean" },
+        "acceptedByBusinessAt": { "type": "string", "format": "date-time", "maxLength": 40 },
+        "rejectedByBusinessAt": { "type": "string", "format": "date-time", "maxLength": 40 },
+        "rejectionReason": { "type": "string", "maxLength": 300 },
+        "cancelledBy": { "type": "string", "enum": ["customer", "business", "admin"] },
+        "cancelledAt": { "type": "string", "format": "date-time", "maxLength": 40 },
+        "cancellationReason": { "type": "string", "maxLength": 300 },
+        "riderAcceptedAt": { "type": "string", "format": "date-time", "maxLength": 40 },
+        "pickedUpAt": { "type": "string", "format": "date-time", "maxLength": 40 },
+        "deliveryAddress": { "type": "string", "maxLength": 300 },
+        "deliveryNotes": { "type": "string", "maxLength": 240 },
+        "deliveryLat": { "type": "number" },
+        "deliveryLng": { "type": "number" },
+        "riderId": { "type": "string", "maxLength": 128 },
+        "riderName": { "type": "string", "maxLength": 100 },
+        "riderPhone": { "type": "string", "maxLength": 30 },
+        "riderEmail": { "type": "string", "format": "email", "maxLength": 160 },
+        "riderLat": { "type": "number" },
+        "riderLng": { "type": "number" },
+        "etaMinutes": { "type": "number" },
+        "distanceKm": { "type": "number" },
+        "driverRating": { "type": "number" },
+        "driverReview": { "type": "string", "maxLength": 400 },
+        "driverTags": { "type": "array" },
+        "officeSettled": { "type": "boolean" },
+        "officeSettledAt": { "type": "string", "format": "date-time", "maxLength": 40 },
+        "orderSource": { "type": "string", "enum": ["app", "whatsapp"] },
+        "whatsappItemPhoto": { "type": "string", "maxLength": 120000 },
+        "whatsappItemNote": { "type": "string", "maxLength": 500 },
+        "whatsappOrderLink": { "type": "string", "maxLength": 500 },
+        "whatsappAmountAlreadyPaid": { "type": "boolean" },
+        "whatsappAmountAlreadyPaidAt": { "type": "string", "format": "date-time", "maxLength": 40 },
+        "hasDeliveryProof": { "type": "boolean" },
+        "deliveryProofCapturedAt": { "type": "string", "format": "date-time", "maxLength": 40 }
+      },
+      "required": [
+        "orderCode",
+        "customerId",
+        "customerName",
+        "restaurantId",
+        "restaurantName",
+        "city",
+        "items",
+        "totalPkr",
+        "paymentMethod",
+        "status",
+        "deliveryAddress",
+        "deliveryLat",
+        "deliveryLng"
+      ]
+    },
+    "SupportMessage": {
+      "title": "SupportMessage",
+      "description": "Live customer support chat message",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 100 },
+        "senderRole": { "type": "string", "enum": ["customer", "support"] },
+        "orderCode": { "type": "string", "maxLength": 32 },
+        "text": { "type": "string", "maxLength": 1000 }
+      },
+      "required": ["userId", "senderName", "senderRole", "text"]
+    },
+    "Rider": {
+      "title": "Rider",
+      "description": "Registered delivery rider managed by HSP delivery app owners",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "cnic": { "type": "string", "maxLength": 20 },
+        "city": { "type": "string", "maxLength": 60 },
+        "vehicleType": { "type": "string", "enum": ["motorbike", "car", "bicycle"] },
+        "vehiclePlate": { "type": "string", "maxLength": 30 },
+        "loginId": { "type": "string", "maxLength": 32 },
+        "monthlySalaryPkr": { "type": "number" },
+        "walletBonusPkr": { "type": "number" },
+        "status": { "type": "string", "enum": ["available", "on_delivery", "offline"] },
+        "rating": { "type": "number" },
+        "completedDeliveries": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "phone", "city", "vehicleType", "vehiclePlate", "status", "createdAt"]
+    },
+    "StaffMember": {
+      "title": "StaffMember",
+      "description": "Owner-managed manager or staff member with Email, Login ID and granular permissions",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["manager", "staff"] },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "city": { "type": "string", "maxLength": 60 },
+        "loginId": { "type": "string", "maxLength": 32 },
+        "monthlySalaryPkr": { "type": "number" },
+        "permissions": { "type": "object" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "role", "phone", "city", "loginId", "monthlySalaryPkr", "permissions", "active", "createdAt"]
+    },
+    "SalaryPayment": {
+      "title": "SalaryPayment",
+      "description": "Monthly payroll salary record for riders and staff",
+      "type": "object",
+      "properties": {
+        "targetType": { "type": "string", "enum": ["rider", "staff"] },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "targetName": { "type": "string", "maxLength": 100 },
+        "roleLabel": { "type": "string", "maxLength": 60 },
+        "monthKey": { "type": "string", "maxLength": 24 },
+        "baseSalaryPkr": { "type": "number" },
+        "bonusPkr": { "type": "number" },
+        "deductionPkr": { "type": "number" },
+        "netAmountPkr": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "paid"] },
+        "paidAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["targetType", "targetId", "targetName", "monthKey", "baseSalaryPkr", "netAmountPkr", "status", "createdAt"]
+    },
+    "AccessPass": {
+      "title": "AccessPass",
+      "description": "Non-PII Login ID & email-hash verification entry issued by App Owner",
+      "type": "object",
+      "properties": {
+        "passId": { "type": "string", "maxLength": 32 },
+        "roleType": { "type": "string", "enum": ["rider", "business", "staff"] },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "label": { "type": "string", "maxLength": 120 },
+        "emailHash": { "type": "string", "maxLength": 64 },
+        "active": { "type": "boolean" },
+        "permissions": { "type": "object" }
+      },
+      "required": ["passId", "roleType", "targetId", "label", "active"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Public HSP delivery configuration including customer WhatsApp order support number and Admin-managed customer & rider delivery rates",
+      "type": "object",
+      "properties": {
+        "whatsappNumber": { "type": "string", "maxLength": 30 },
+        "welcomeTitle": { "type": "string", "maxLength": 120 },
+        "welcomeSubtitle": { "type": "string", "maxLength": 240 },
+        "deletedBusinessIds": { "type": "array", "description": "List of removed business IDs excluded from the app directory" },
+        "businessCategories": { "type": "array", "description": "Admin-managed list of business categories shown across customer marketplace and store registration" },
+        "customerBaseKm": { "type": "number", "description": "Base distance threshold in km for customer flat delivery fee" },
+        "customerBaseFeePkr": { "type": "number", "description": "Base delivery charge in PKR for customers within base km" },
+        "customerExtraPerKmPkr": { "type": "number", "description": "Additional delivery charge per km beyond customer base km" },
+        "riderBaseKm": { "type": "number", "description": "Base distance threshold in km for rider delivery pay" },
+        "riderBasePayPkr": { "type": "number", "description": "Base wallet pay in PKR for riders within base km" },
+        "riderExtraPerKmPkr": { "type": "number", "description": "Additional rider wallet pay per km beyond rider base km" },
+        "customerFreeCancelBeforeAccept": { "type": "boolean", "description": "Whether customers can cancel free before store accepts" },
+        "customerLateCancelFeePkr": { "type": "number", "description": "Cancellation fee in PKR if cancelled after store acceptance" },
+        "customerRefundWindowHours": { "type": "number", "description": "Refund processing window in hours for prepaid cancelled orders" },
+        "customerPolicyRules": { "type": "string", "maxLength": 4000, "description": "Admin-editable Customer Order Cancellation Policy rules" },
+        "businessResponseSlaMinutes": { "type": "number", "description": "Target minutes for business owner to accept or reject incoming order" },
+        "businessMaxMonthlyCancellations": { "type": "number", "description": "Monthly allowance of store rejections/cancellations before review" },
+        "businessCancelPenaltyPkr": { "type": "number", "description": "Penalty in PKR for unjustified post-acceptance store cancellations" },
+        "businessPolicyRules": { "type": "string", "maxLength": 4000, "description": "Admin-editable Business Owner Order Cancellation & Rejection Policy rules" },
+        "playAndroidPackageName": { "type": "string", "maxLength": 120, "description": "Android applicationId / package name for Google Play Console" },
+        "playSha256Fingerprint": { "type": "string", "maxLength": 120, "description": "Google Play App Signing SHA-256 certificate fingerprint for assetlinks.json" },
+        "playDeveloperName": { "type": "string", "maxLength": 100, "description": "Google Play Console developer / publisher display name" },
+        "playSupportEmail": { "type": "string", "format": "email", "maxLength": 160, "description": "Public support email listed on Google Play Console" },
+        "playProductionUrl": { "type": "string", "maxLength": 300, "description": "Live HTTPS web app URL wrapped for Google Play TWA" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["whatsappNumber"]
+    },
+    "BusinessPayout": {
+      "title": "BusinessPayout",
+      "description": "Business owner settlement record tracking paid or pending payouts",
+      "type": "object",
+      "properties": {
+        "restaurantId": { "type": "string", "maxLength": 128 },
+        "restaurantName": { "type": "string", "maxLength": 120 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "ownerEmail": { "type": "string", "maxLength": 150 },
+        "city": { "type": "string", "maxLength": 60 },
+        "businessLoginId": { "type": "string", "maxLength": 32 },
+        "monthKey": { "type": "string", "maxLength": 24 },
+        "grossSubtotalPkr": { "type": "number" },
+        "commissionPkr": { "type": "number" },
+        "netPayablePkr": { "type": "number" },
+        "payoutMethod": { "type": "string", "enum": ["BANK", "JAZZCASH", "EASYPAISA", "CASH"] },
+        "paymentRef": { "type": "string", "maxLength": 80 },
+        "status": { "type": "string", "enum": ["pending", "paid"] },
+        "paidAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["restaurantId", "restaurantName", "city", "monthKey", "grossSubtotalPkr", "commissionPkr", "netPayablePkr", "payoutMethod", "status", "updatedAt", "createdAt"]
+    },
+    "DeliveryProof": {
+      "title": "DeliveryProof",
+      "description": "Admin-only delivery photo verification record captured by rider upon marking order delivered",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "maxLength": 128 },
+        "orderCode": { "type": "string", "maxLength": 32 },
+        "riderId": { "type": "string", "maxLength": 128 },
+        "riderName": { "type": "string", "maxLength": 100 },
+        "photoDataUrl": { "type": "string", "maxLength": 120000 },
+        "capturedAt": { "type": "string", "format": "date-time", "maxLength": 40 }
+      },
+      "required": ["orderId", "orderCode", "riderId", "riderName", "photoDataUrl", "capturedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profiles isolated to owner and admin"
+    },
+    "/restaurants/{restaurantId}": {
+      "schema": { "$ref": "#/entities/Restaurant" },
+      "description": "Public Pakistani business & restaurant directory"
+    },
+    "/restaurants/{restaurantId}/menuItems/{itemId}": {
+      "schema": { "$ref": "#/entities/MenuItem" },
+      "description": "Store products & menu items with food imagery"
+    },
+    "/restaurants/{restaurantId}/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/RestaurantReview" },
+      "description": "Customer reviews for each store"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Live delivery orders with GPS distance fees, tips, rider payouts, and driver ratings"
+    },
+    "/orders/{orderId}/deliveryProof/{proofId}": {
+      "schema": { "$ref": "#/entities/DeliveryProof" },
+      "description": "Admin-isolated delivery proof photos uploaded by assigned riders"
+    },
+    "/supportMessages/{messageId}": {
+      "schema": { "$ref": "#/entities/SupportMessage" },
+      "description": "Customer support chat messages"
+    },
+    "/riders/{riderId}": {
+      "schema": { "$ref": "#/entities/Rider" },
+      "description": "Owner-managed delivery rider fleet roster"
+    },
+    "/staffMembers/{staffId}": {
+      "schema": { "$ref": "#/entities/StaffMember" },
+      "description": "Owner-managed managers & staff with permissions and salaries"
+    },
+    "/salaryRecords/{salaryId}": {
+      "schema": { "$ref": "#/entities/SalaryPayment" },
+      "description": "Monthly salary records for riders and staff"
+    },
+    "/accessPasses/{passId}": {
+      "schema": { "$ref": "#/entities/AccessPass" },
+      "description": "Owner-granted Login ID passes for rider, business, and staff sign-in"
+    },
+    "/appSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Admin-managed WhatsApp support number and welcome banner settings"
+    },
+    "/businessPayouts/{payoutId}": {
+      "schema": { "$ref": "#/entities/BusinessPayout" },
+      "description": "Business owner payment settlements (paid or pending)"
+    }
+  }
+}

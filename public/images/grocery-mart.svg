@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="800" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#064E3B"/>
+      <stop offset="55%" stop-color="#0F766E"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="basket" x1="200" y1="260" x2="600" y2="490" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg)"/>
+  <circle cx="650" cy="120" r="140" fill="#10B981" fill-opacity="0.16"/>
+  <circle cx="150" cy="480" r="160" fill="#FBBF24" fill-opacity="0.12"/>
+  <!-- Grocery Bag -->
+  <rect x="240" y="210" width="150" height="210" rx="18" fill="#FEF3C7"/>
+  <rect x="240" y="210" width="150" height="44" rx="10" fill="#FDE68A"/>
+  <path d="M275 210V182C275 162 292 146 315 146C338 146 355 162 355 182V210" stroke="#F59E0B" stroke-width="10" stroke-linecap="round"/>
+  <!-- Fresh Greens & Produce -->
+  <circle cx="470" cy="235" r="52" fill="#EF4444"/>
+  <path d="M470 183C476 165 496 156 510 165C500 182 482 188 470 183Z" fill="#22C55E"/>
+  <ellipse cx="535" cy="260" rx="46" ry="54" fill="#F97316"/>
+  <circle cx="415" cy="260" r="42" fill="#22C55E"/>
+  <!-- Milk / Olive Oil Bottle -->
+  <rect x="495" y="135" width="64" height="145" rx="14" fill="#E0F2FE"/>
+  <rect x="513" y="112" width="28" height="26" rx="6" fill="#0284C7"/>
+  <rect x="506" y="185" width="42" height="52" rx="6" fill="#38BDF8"/>
+  <!-- Woven Basket Front -->
+  <path d="M185 295H615L572 470C568 485 554 495 538 495H262C246 495 232 485 228 470L185 295Z" fill="url(#basket)"/>
+  <rect x="168" y="276" width="464" height="32" rx="16" fill="#FBBF24"/>
+  <path d="M240 345H560M255 395H545M270 445H530" stroke="#92400E" stroke-opacity="0.35" stroke-width="6" stroke-linecap="round"/>
+  <rect x="265" y="340" width="95" height="28" rx="14" fill="#FFFBEB" fill-opacity="0.9"/>
+  <circle cx="284" cy="354" r="6" fill="#10B981"/>
+</svg>
