@@ -142,6 +142,7 @@ jobs:
             m.appVersionCode = Number(process.env.INPUT_VCODE) || 1;
             m.appVersion = vName;
             m.appVersionName = vName;
+            m.minSdkVersion = Math.max(Number(m.minSdkVersion) || 24, 24);
             m.shortcuts = (m.shortcuts || []).map((s) => ({
               ...s,
               name: sanitize(s.name),

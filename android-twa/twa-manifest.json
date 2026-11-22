@@ -61,6 +61,6 @@
   "isChromeOSOnly": false,
   "isMetaQuest": false,
   "fullScopeUrl": "https://ais-pre-jjyvyo7m4unbdm4dz4upjq-756142993760.asia-southeast1.run.app/",
-  "minSdkVersion": 23,
+  "minSdkVersion": 24,
   "orientation": "portrait"
 }

@@ -154,7 +154,7 @@ export function PlayConsolePublishingPanel({
       },
       enableSiteSettingsShortcut: true,
       fullScopeUrl: `${cleanUrl}/`,
-      minSdkVersion: 23,
+      minSdkVersion: 24,
       orientation: 'portrait',
     };
     downloadTextFile(
@@ -344,7 +344,7 @@ async function main() {
     features: { locationDelegation: { enabled: true }, playBilling: { enabled: false } },
     enableSiteSettingsShortcut: true,
     fullScopeUrl: ${JSON.stringify(`${cleanUrl}/`)},
-    minSdkVersion: 23,
+    minSdkVersion: 24,
     orientation: 'portrait',
   };
 
