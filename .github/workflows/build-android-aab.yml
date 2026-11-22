@@ -38,67 +38,34 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK Command-Line Tools
-        uses: android-actions/setup-android@v3
+      - name: Setup Android SDK (API 36 & Build-Tools 36.0.0)
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
-      - name: Prepare Android SDK (API 36, Build-Tools & Bubblewrap Compatibility)
+      - name: Configure Bubblewrap SDK & JDK Paths
         id: android_sdk
         shell: bash
         run: |
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          echo "Resolved ANDROID SDK_ROOT: $SDK_ROOT"
-          if [ ! -d "$SDK_ROOT" ]; then
-            echo "ERROR: Android SDK directory not found at $SDK_ROOT"
-            exit 1
-          fi
-
-          # Ensure runner owns SDK_ROOT and all subdirectories (licenses, platforms, build-tools)
-          sudo chown -R "$(id -u):$(id -g)" "$SDK_ROOT" 2>/dev/null || true
-
-          # Locate sdkmanager inside cmdline-tools or PATH
-          SDKMANAGER="$(command -v sdkmanager 2>/dev/null || true)"
-          if [ -z "$SDKMANAGER" ]; then
-            for candidate in \
-              "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
-              "$SDK_ROOT"/cmdline-tools/*/bin/sdkmanager \
-              "$SDK_ROOT/tools/bin/sdkmanager"; do
-              if [ -x "$candidate" ]; then
-                SDKMANAGER="$candidate"
-                break
-              fi
-            done
-          fi
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager not found inside $SDK_ROOT"
-            ls -la "$SDK_ROOT"
-            exit 1
-          fi
-
-          SDKMANAGER_DIR="$(dirname "$SDKMANAGER")"
-          echo "Using sdkmanager: $SDKMANAGER"
+          echo "Using Android SDK: $SDK_ROOT"
 
           # Bubblewrap's AndroidSdkTools.validatePath requires <sdkPath>/tools or <sdkPath>/bin.
           if [ ! -e "$SDK_ROOT/bin" ] && [ ! -e "$SDK_ROOT/tools" ]; then
-            ln -s "$SDKMANAGER_DIR" "$SDK_ROOT/bin" 2>/dev/null || sudo ln -s "$SDKMANAGER_DIR" "$SDK_ROOT/bin"
+            CMDLINE_BIN=""
+            for candidate in \
+              "$SDK_ROOT/cmdline-tools/latest/bin" \
+              "$SDK_ROOT"/cmdline-tools/*/bin; do
+              if [ -d "$candidate" ]; then
+                CMDLINE_BIN="$candidate"
+                break
+              fi
+            done
+            if [ -n "$CMDLINE_BIN" ]; then
+              ln -s "$CMDLINE_BIN" "$SDK_ROOT/bin" 2>/dev/null || sudo ln -s "$CMDLINE_BIN" "$SDK_ROOT/bin"
+            fi
           fi
 
-          # Accept all Android SDK licenses non-interactively
-          yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null 2>&1 || true
-
-          # Install Android API 36 platform (required by Bubblewrap's compileSdkVersion 36)
-          if [ ! -d "$SDK_ROOT/platforms/android-36" ]; then
-            echo "Installing platforms;android-36..."
-            yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-36"
-          fi
-
-          # Ensure a recent build-tools package containing zipalign & apksigner is installed
-          if ! ls -d "$SDK_ROOT"/build-tools/36.* >/dev/null 2>&1; then
-            (yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "build-tools;36.0.0") || \
-            (yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "build-tools;35.0.0") || true
-          fi
-
-          # Write Bubblewrap config with verified JDK and SDK paths
           mkdir -p ~/.bubblewrap
           cat <<EOF > ~/.bubblewrap/config.json
           {
@@ -108,8 +75,6 @@ jobs:
           EOF
 
           echo "sdk_root=$SDK_ROOT" >> "$GITHUB_OUTPUT"
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
 
       - name: Prepare Release Keystore (Secrets or New Upload Key)
         id: keystore
