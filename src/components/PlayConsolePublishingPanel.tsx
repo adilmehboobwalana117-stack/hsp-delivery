@@ -32,7 +32,7 @@ export function PlayConsolePublishingPanel({
   onUpdateAppSettings,
 }: PlayConsolePublishingPanelProps) {
   const [packageName, setPackageName] = useState(
-    appSettings.playAndroidPackageName || 'hspdelivery.com'
+    appSettings.playAndroidPackageName || 'hspdeliverypk.com'
   );
   const [sha256, setSha256] = useState(appSettings.playSha256Fingerprint || '');
   const [developerName, setDeveloperName] = useState(
@@ -48,7 +48,7 @@ export function PlayConsolePublishingPanel({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    setPackageName(appSettings.playAndroidPackageName || 'hspdelivery.com');
+    setPackageName(appSettings.playAndroidPackageName || 'hspdeliverypk.com');
     setSha256(appSettings.playSha256Fingerprint || '');
     setDeveloperName(appSettings.playDeveloperName || 'HSP delivery');
     setSupportEmail(appSettings.playSupportEmail || '');
@@ -98,7 +98,7 @@ export function PlayConsolePublishingPanel({
     } catch {
       // fallback to default host
     }
-    const cleanPkg = packageName.trim() || 'hspdelivery.com';
+    const cleanPkg = packageName.trim() || 'hspdeliverypk.com';
     const appTitle = developerName.trim() || 'HSP delivery';
     const twaManifest = {
       packageId: cleanPkg,
@@ -122,8 +122,8 @@ export function PlayConsolePublishingPanel({
         path: './hsp-delivery-release.keystore',
         alias: 'hspdelivery',
       },
-      appVersion: '1.0.0',
-      appVersionName: '1.0.0',
+      appVersion: '1.1.1',
+      appVersionName: '1.1.1',
       appVersionCode: 1,
       shortcuts: [
         {
@@ -183,7 +183,7 @@ export function PlayConsolePublishingPanel({
     } catch {
       // fallback to default host
     }
-    const cleanPkg = packageName.trim() || 'hspdelivery.com';
+    const cleanPkg = packageName.trim() || 'hspdeliverypk.com';
     const appTitle = developerName.trim() || 'HSP delivery';
 
     const fetchIconBase64 = async (path: string): Promise<string> => {
@@ -331,8 +331,8 @@ async function main() {
     maskableIconUrl: localBase + '/pwa-maskable-512x512.png',
     splashScreenFadeOutDuration: 300,
     signingKey: { path: './hsp-delivery-release.keystore', alias: 'hspdelivery' },
-    appVersion: '1.0.0',
-    appVersionName: '1.0.0',
+    appVersion: '1.1.1',
+    appVersionName: '1.1.1',
     appVersionCode: 1,
     shortcuts: [
       { name: 'Order Food and Shops', shortName: 'Order Now', url: ${JSON.stringify(`${cleanUrl}/?tab=order`)}, chosenIconUrl: localBase + '/pwa-192x192.png' },
@@ -422,7 +422,7 @@ main().catch((err) => {
     const cleanProd = productionUrl.trim();
 
     if (!isValidAndroidPackageName(cleanPkg)) {
-      setErrorMsg('Enter a valid Android Package Name (e.g., hspdelivery.com).');
+      setErrorMsg('Enter a valid Android Package Name (e.g., hspdeliverypk.com).');
       return;
     }
     if (cleanFp && !isValidSha256Fingerprint(cleanFp)) {
@@ -618,7 +618,7 @@ main().catch((err) => {
                 maxLength={120}
                 value={packageName}
                 onChange={(e) => setPackageName(e.target.value)}
-                placeholder="hspdelivery.com"
+                placeholder="hspdeliverypk.com"
                 className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-mono-tabular font-bold bg-zinc-900 text-yellow-300 rounded-xl border border-zinc-700 focus:outline-none focus:border-amber-400"
               />
               <p className="text-[10px] text-zinc-500 mt-1">
@@ -831,7 +831,7 @@ main().catch((err) => {
                 <strong>Build Signed Android Bundle (.aab):</strong> Click{' '}
                 <strong>Generate Android .AAB on PWABuilder</strong> above (or run Bubblewrap CLI
                 below) using your Package Name{' '}
-                <code className="text-amber-300">{packageName || 'hspdelivery.com'}</code>.
+                <code className="text-amber-300">{packageName || 'hspdeliverypk.com'}</code>.
               </li>
               <li>
                 <strong>Upload .AAB &amp; Copy SHA-256:</strong> Upload the generated{' '}

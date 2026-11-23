@@ -86,7 +86,7 @@ function patchGeneratedAndroidProject(projectDir) {
             if (System.getenv('HSP_STORE_PASS')) {
                 storeFile file('../hsp-delivery-release.keystore')
                 storePassword System.getenv('HSP_STORE_PASS')
-                keyAlias 'hspdelivery'
+                keyAlias System.getenv('HSP_KEY_ALIAS') ?: 'hspdelivery'
                 keyPassword System.getenv('HSP_KEY_PASS') ?: System.getenv('HSP_STORE_PASS')
             }
         }
@@ -303,8 +303,8 @@ async function main() {
   delete manifest.webManifestUrl;
   manifest.name = sanitizeAndroidString(manifest.name);
   manifest.launcherName = sanitizeAndroidString(manifest.launcherName);
-  manifest.appVersion = manifest.appVersion || manifest.appVersionName || '1.0.0';
-  manifest.appVersionName = manifest.appVersionName || manifest.appVersion || '1.0.0';
+  manifest.appVersion = manifest.appVersion || manifest.appVersionName || '1.1.1';
+  manifest.appVersionName = manifest.appVersionName || manifest.appVersion || '1.1.1';
   manifest.minSdkVersion = Math.max(Number(manifest.minSdkVersion) || 24, 24);
   manifest.iconUrl = `${localBase}/pwa-512x512.png`;
   manifest.maskableIconUrl = `${localBase}/pwa-maskable-512x512.png`;

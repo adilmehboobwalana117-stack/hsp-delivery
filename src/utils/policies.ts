@@ -115,7 +115,7 @@ export function isValidSha256Fingerprint(fp: string): boolean {
 }
 
 export function buildAssetLinksJson(packageName: string, sha256Fingerprint: string): string {
-  const pkg = packageName.trim() || 'hspdelivery.com';
+  const pkg = packageName.trim() || 'hspdeliverypk.com';
   const fp =
     sha256Fingerprint.trim().toUpperCase() ||
     '00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00';

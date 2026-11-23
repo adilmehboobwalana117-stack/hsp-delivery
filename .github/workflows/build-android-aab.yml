@@ -10,7 +10,7 @@ on:
       package_id:
         description: 'Android Package Name (Application ID)'
         required: true
-        default: 'hspdelivery.com'
+        default: 'hspdeliverypk.com'
       version_code:
         description: 'Android Version Code (increment for every Play Console upload)'
         required: true
@@ -18,7 +18,7 @@ on:
       version_name:
         description: 'Android Version Name'
         required: true
-        default: '1.0.0'
+        default: '1.1.1'
 
 jobs:
   build-android-bundle:
@@ -85,18 +85,27 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS_SECRET: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -n "${KEYSTORE_BASE64:-}" ]; then
             STORE_PASS="${KEYSTORE_PASSWORD:-}"
             KEY_PASS="${KEY_PASSWORD:-$STORE_PASS}"
             echo "$KEYSTORE_BASE64" | base64 -d > hsp-delivery-release.keystore
+            if [ -n "${KEY_ALIAS_SECRET:-}" ]; then
+              KEY_ALIAS="$KEY_ALIAS_SECRET"
+            else
+              # Auto-detect the first PrivateKeyEntry alias inside the uploaded keystore
+              KEY_ALIAS="$(keytool -list -keystore hsp-delivery-release.keystore -storepass "$STORE_PASS" | awk -F',' '/PrivateKeyEntry/ { print $1; exit }')"
+              KEY_ALIAS="${KEY_ALIAS:-hspdelivery}"
+            fi
           else
             STORE_PASS="HspDelivery2026!"
             KEY_PASS="$STORE_PASS"
+            KEY_ALIAS="hspdelivery"
             rm -f hsp-delivery-release.keystore
             keytool -genkeypair -v \
               -keystore hsp-delivery-release.keystore \
-              -alias hspdelivery \
+              -alias "$KEY_ALIAS" \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass "$STORE_PASS" -keypass "$KEY_PASS" \
               -dname "CN=HSP delivery, OU=Operations, O=HSP delivery, L=Hasilpur, S=Punjab, C=PK"
@@ -106,14 +115,25 @@ jobs:
           echo "::add-mask::$KEY_PASS"
           echo "store_pass=$STORE_PASS" >> "$GITHUB_OUTPUT"
           echo "key_pass=$KEY_PASS" >> "$GITHUB_OUTPUT"
+          echo "key_alias=$KEY_ALIAS" >> "$GITHUB_OUTPUT"
 
-          KEYTOOL_OUT="$(keytool -list -v -keystore hsp-delivery-release.keystore -alias hspdelivery -storepass "$STORE_PASS")"
+          # Export PEM certificate (needed if resetting your upload key in Google Play Console)
+          keytool -export -rfc \
+            -keystore hsp-delivery-release.keystore \
+            -alias "$KEY_ALIAS" \
+            -storepass "$STORE_PASS" \
+            -file upload_certificate.pem
+
+          KEYTOOL_OUT="$(keytool -list -v -keystore hsp-delivery-release.keystore -alias "$KEY_ALIAS" -storepass "$STORE_PASS")"
+          SHA1="$(awk '/SHA1:/ { print $2; exit }' <<< "$KEYTOOL_OUT")"
           SHA256="$(awk '/SHA256:/ { print $2; exit }' <<< "$KEYTOOL_OUT")"
           if [ -z "$SHA256" ]; then
-            echo "ERROR: Could not extract SHA-256 fingerprint from keystore"
+            echo "ERROR: Could not extract SHA-256 fingerprint from keystore (alias: $KEY_ALIAS)"
             exit 1
           fi
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "Key Alias:         $KEY_ALIAS"
+          echo "Upload Key SHA-1:  $SHA1"
           echo "Upload Key SHA-256: $SHA256"
 
       - name: Update twa-manifest.json with Workflow Inputs
@@ -129,7 +149,7 @@ jobs:
             const sanitize = (s) => typeof s === "string" ? s.replace(/\s*&\s*/g, " and ").replace(/\u2014/g, "-") : s;
             const cleanUrl = process.env.INPUT_URL.replace(/\/+$/, "");
             const host = new URL(cleanUrl).host;
-            const vName = process.env.INPUT_VNAME || "1.0.0";
+            const vName = process.env.INPUT_VNAME || "1.1.1";
             const m = JSON.parse(fs.readFileSync("twa-manifest.json", "utf8"));
             m.packageId = process.env.INPUT_PKG;
             m.host = host;
@@ -165,6 +185,7 @@ jobs:
           SDK_ROOT: ${{ steps.android_sdk.outputs.sdk_root }}
           HSP_STORE_PASS: ${{ steps.keystore.outputs.store_pass }}
           HSP_KEY_PASS: ${{ steps.keystore.outputs.key_pass }}
+          HSP_KEY_ALIAS: ${{ steps.keystore.outputs.key_alias }}
         run: |
           echo "sdk.dir=$SDK_ROOT" > local.properties
           chmod +x ./gradlew
@@ -241,4 +262,5 @@ jobs:
             android-twa/app-release-signed.apk
             android-twa/assetlinks.json
             android-twa/hsp-delivery-release.keystore
+            android-twa/upload_certificate.pem
           retention-days: 30
